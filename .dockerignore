@@ -1,0 +1,8 @@
+data/
+server.log
+*.db
+.venv/
+__pycache__/
+index-v1-backup.html
+.git/
+.DS_Store
