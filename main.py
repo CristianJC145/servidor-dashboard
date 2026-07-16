@@ -4,9 +4,13 @@ Dashboard de tareas multi-usuario con roles (admin / editor).
 Backend: FastAPI + SQLite. Diseñado para desplegarse en EasyPanel (Docker).
 """
 
+import io
 import os
 import re
 import json
+import shutil
+import tarfile
+import tempfile
 import time
 import sqlite3
 import secrets
@@ -18,7 +22,7 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
@@ -1557,6 +1561,57 @@ def finish_task(task_id: int, body: FinishBody, admin: dict = Depends(require_ad
     result["cleaned_files"] = cleaned
     result["links_saved"] = links_saved
     return result
+
+
+# ---------------------------------------------------------------- copia de seguridad
+
+
+@app.get("/api/admin/backup")
+def download_backup(admin: dict = Depends(require_admin)):
+    """Descarga TODO (base de datos + adjuntos del servidor) en un solo archivo."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(DB_PATH, arcname="servidor.db")
+        if os.path.isdir(UPLOADS_DIR):
+            tar.add(UPLOADS_DIR, arcname="uploads")
+    buf.seek(0)
+    fecha = datetime.now().strftime("%Y-%m-%d")
+    return Response(
+        content=buf.read(), media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="servidor-backup-{fecha}.tar.gz"'},
+    )
+
+
+@app.post("/api/admin/restore")
+async def restore_backup(file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    """Restaura una copia de seguridad (reemplaza base de datos y adjuntos).
+    Después de restaurar hay que iniciar sesión de nuevo."""
+    data = await file.read()
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+                tar.extractall(td, filter="data")
+        except Exception:
+            raise HTTPException(400, "El archivo no es una copia de seguridad válida (.tar.gz).")
+        newdb = os.path.join(td, "servidor.db")
+        if not os.path.isfile(newdb):
+            raise HTTPException(400, "La copia no contiene servidor.db.")
+        # validar que de verdad es la base de datos de esta app
+        try:
+            check = sqlite3.connect(newdb)
+            ok = check.execute("SELECT name FROM sqlite_master WHERE name IN ('tasks','users')").fetchall()
+            check.close()
+            if len(ok) < 2:
+                raise ValueError()
+        except Exception:
+            raise HTTPException(400, "El archivo no parece una base de datos del SERVIDOR.")
+        os.replace(newdb, DB_PATH)
+        up = os.path.join(td, "uploads")
+        if os.path.isdir(up):
+            os.makedirs(UPLOADS_DIR, exist_ok=True)
+            for name in os.listdir(up):
+                shutil.copy2(os.path.join(up, name), os.path.join(UPLOADS_DIR, name))
+    return {"ok": True, "note": "Restaurado. Inicia sesión de nuevo."}
 
 
 # ---------------------------------------------------------------- frontend

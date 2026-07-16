@@ -1562,7 +1562,53 @@ function renderAjustes(){
         <button class="btn" id="dr-save">Guardar y conectar</button>
       </div>
     `}
+  </div>
+
+  <div class="panelcard" style="max-width:640px; margin-top:22px">
+    <div class="drive-head"><span style="font-size:22px">🗄️</span><div>
+      <b>Copia de seguridad</b><div class="drive-status-line"><span class="drive-email">base de datos + adjuntos del servidor</span></div>
+    </div></div>
+    <p class="drive-help">Descarga una copia completa de todos los datos (canales, tareas, usuarios, conexión con Drive).
+      Guárdala de vez en cuando — con ella puedes restaurar todo en este u otro servidor.</p>
+    <div class="err" id="bk-err"></div>
+    <div class="drive-actions" style="gap:10px">
+      <button class="btn ghost sm" id="bk-down">⬇ Descargar copia</button>
+      <button class="btn ghost sm" id="bk-rest">↻ Restaurar desde archivo…</button>
+      <input type="file" id="bk-file" accept=".gz,.tar.gz,application/gzip" hidden>
+    </div>
   </div>`;
+
+  const bkDown = $('#bk-down');
+  if(bkDown) bkDown.onclick = async ()=>{
+    bkDown.disabled = true; bkDown.textContent = 'Preparando…';
+    try{
+      const r = await fetch('/api/admin/backup', {headers:{Authorization:'Bearer '+TOKEN}});
+      if(!r.ok) throw new Error('No se pudo generar la copia.');
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'servidor-backup-' + new Date().toISOString().slice(0,10) + '.tar.gz';
+      a.click(); URL.revokeObjectURL(a.href);
+      toast('Copia descargada ✦');
+    }catch(e){ $('#bk-err').textContent = e.message; }
+    bkDown.disabled = false; bkDown.textContent = '⬇ Descargar copia';
+  };
+  const bkRest = $('#bk-rest'), bkFile = $('#bk-file');
+  if(bkRest) bkRest.onclick = ()=> bkFile.click();
+  if(bkFile) bkFile.onchange = async ()=>{
+    const f = bkFile.files[0]; bkFile.value='';
+    if(!f) return;
+    if(!confirm(`¿Restaurar "${f.name}"?\n\nEsto REEMPLAZA todos los datos actuales por los de la copia.\nDespués tendrás que iniciar sesión de nuevo.`)) return;
+    bkRest.disabled = true; bkRest.textContent = 'Restaurando…';
+    try{
+      const fd = new FormData(); fd.append('file', f);
+      const r = await fetch('/api/admin/restore', {method:'POST', headers:{Authorization:'Bearer '+TOKEN}, body:fd});
+      const d2 = await r.json();
+      if(!r.ok) throw new Error(d2.detail || 'No se pudo restaurar.');
+      alert('✅ Copia restaurada. Ahora inicia sesión de nuevo.');
+      localStorage.removeItem('srv_token'); location.reload();
+    }catch(e){ $('#bk-err').textContent = e.message; bkRest.disabled = false; bkRest.textContent = '↻ Restaurar desde archivo…'; }
+  };
 
   const save = $('#dr-save');
   if(save) save.onclick = async ()=>{
