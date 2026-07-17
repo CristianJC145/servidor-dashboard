@@ -74,6 +74,9 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 .wordmark{font-family:'Unbounded'; font-weight:600; font-size:19px; letter-spacing:.1em; color:var(--ink)}
 .wordmark span{color:var(--violet); text-shadow:0 0 18px rgba(255,106,31,.55)}
 .wordmark small{display:block; font-family:'Space Mono',monospace; font-size:9px; font-weight:400; color:var(--dim); letter-spacing:.3em; margin-top:3px}
+#brand-home{cursor:pointer; user-select:none; transition:opacity .15s}
+#brand-home:hover{opacity:.85}
+#brand-home:active{opacity:.7}
 
 /* ============ shell ============ */
 .shell{display:grid; grid-template-columns:264px minmax(0,1fr); min-height:100vh}
@@ -859,7 +862,9 @@ function renderApp(){
   $('#app').innerHTML = `
   <div class="shell">
     <aside class="side">
-      <div class="wordmark">SERVIDOR <span>YOUTUBE</span><small>CENTRO DE OPERACIONES</small></div>
+      <div class="wordmark" id="brand-home" role="button" tabindex="0" title="Ir al inicio"
+        onclick="setView({name:'canales'})"
+        onkeydown="if(event.key==='Enter')setView({name:'canales'})">SERVIDOR <span>YOUTUBE</span><small>CENTRO DE OPERACIONES</small></div>
       <button class="nav-item" id="nav-canales" onclick="setView({name:'canales'})">${ICONS.canales}<span>Canales</span></button>
       <button class="nav-item" id="nav-pend" onclick="openDrawer()">${ICONS.pend}<span>Pendientes</span>
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
