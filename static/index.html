@@ -816,6 +816,7 @@ const ICONS = {
   ajustes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4 6l2.2 1.3M17.8 16.7L20 18M20 6l-2.2 1.3M6.2 16.7L4 18"/></svg>',
   drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M8 3h8l6 10.5h-8z" opacity=".55"/><path d="M2 13.5 8 3l4 7-6 10.5z"/><path d="M22 13.5 18.5 20H6l3.5-6.5z" opacity=".8"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5c0-3.3-2.7-6-6-6s-6 2.7-6 6c0 6-2.5 7-2.5 7h17S18 14.5 18 8.5"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>',
 };
 
 async function api(path, opts = {}) {
@@ -936,6 +937,7 @@ function renderApp(){
       <button class="nav-item" id="nav-pend" onclick="openDrawer()">${ICONS.pend}<span>Pendientes</span>
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
       <button class="nav-item" id="nav-buscar" onclick="setView({name:'buscar'})">${ICONS.buscar}<span>Buscar</span></button>
+      <button class="nav-item" id="nav-notif" onclick="openNotif()">${ICONS.bell}<span>Notificaciones</span></button>
       ${isAdmin?`<button class="nav-item" id="nav-equipo" onclick="setView({name:'equipo'})">${ICONS.equipo}<span>Equipo</span></button>`:''}
       ${isAdmin?`<button class="nav-item" id="nav-ajustes" onclick="setView({name:'ajustes'})">${ICONS.ajustes}<span>Ajustes</span>
         ${DRIVE.has_credentials&&!DRIVE.connected?'<em class="badge" style="background:var(--danger)">!</em>':''}</button>`:''}
@@ -1657,6 +1659,106 @@ async function resetPass(id){
 }
 
 /* =============================== vista AJUSTES / DRIVE =============================== */
+/* =============================== notificaciones por Telegram =============================== */
+async function openNotif(){
+  document.body.classList.remove('navopen');
+  document.querySelectorAll('.overlay').forEach(o=>o.remove());
+  let st;
+  try{ st = await api('/telegram/status'); }catch(e){ toast(e.message); return; }
+  const isAdmin = ME.role==='admin';
+
+  const cuerpo = st.linked ? `
+      <div class="dupwarn" style="border-color:rgba(255,178,76,.35)"><b>✅ Tu Telegram está vinculado</b>
+      Te llegarán avisos cuando haya tareas nuevas, pasen a revisión o se terminen.</div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="n-test">Enviar prueba</button>
+        <button class="btn danger" id="n-unlink">Desvincular</button>
+        <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button>
+      </div>`
+    : st.configured ? `
+      <p class="drive-help">Vincula tu Telegram para recibir los avisos de tareas.</p>
+      <div class="steps">
+        <div class="step"><span class="num">1</span><div class="stepbody">Pulsa <b>Vincular mi Telegram</b> — se abre el bot <b>@${esc(st.bot_username)}</b>.</div></div>
+        <div class="step"><span class="num">2</span><div class="stepbody">En Telegram dale a <b>INICIAR / START</b>.</div></div>
+        <div class="step"><span class="num">3</span><div class="stepbody">Vuelve aquí y pulsa <b>Verificar</b>.</div></div>
+      </div>
+      <div class="err" id="n-err"></div>
+      <div class="modal-actions">
+        <button class="btn" id="n-link">1️⃣ Vincular mi Telegram</button>
+        <button class="btn gold" id="n-verify" style="display:none">2️⃣ Ya le di START — Verificar</button>
+        <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button>
+      </div>`
+    : `<div class="dupwarn" style="margin-top:12px"><b>⚠ El bot de Telegram aún no está configurado</b>
+      ${isAdmin?'Configúralo aquí abajo — toma 2 minutos.':'Pídele al administrador que lo configure.'}</div>
+      ${isAdmin?'':`<div class="modal-actions"><button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button></div>`}`;
+
+  const cfgAdmin = isAdmin ? `
+      <div class="divider"></div>
+      <details class="drive-creds" ${st.configured?'':'open'}>
+        <summary>Bot de Telegram (administrador) ${st.configured?`· <span style="color:var(--gold)">@${esc(st.bot_username)} ✓</span>`:'· <span style="color:var(--danger)">falta configurar</span>'}</summary>
+        <p class="drive-help" style="font-size:12.5px">
+          1) En Telegram abre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> y envíale <code>/newbot</code>.<br>
+          2) Ponle un nombre (ej. "Servidor Youtube") y un usuario (ej. "servidor_yt_bot").<br>
+          3) Copia el <b>token</b> que te da y pégalo aquí:</p>
+        <label>Token del bot</label>
+        <input id="n-token" placeholder="123456789:AAH…" autocomplete="off">
+        <div class="err" id="n-err2"></div>
+        <div class="drive-actions"><button class="btn ghost sm" id="n-savetoken">Guardar bot</button></div>
+      </details>` : '';
+
+  const ov = document.createElement('div'); ov.className='overlay';
+  ov.innerHTML = `<div class="modal" style="max-width:520px">
+    <h2>🔔 Notificaciones</h2>
+    <div class="sub">AVISOS DE TAREAS POR TELEGRAM</div>
+    ${cuerpo}
+    ${cfgAdmin}
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+
+  const lBtn = $('#n-link');
+  if(lBtn) lBtn.onclick = async ()=>{
+    try{
+      const { url } = await api('/telegram/link',{method:'POST'});
+      window.open(url, '_blank');
+      $('#n-verify').style.display='';
+    }catch(e){ $('#n-err').textContent = e.message; }
+  };
+  const vBtn = $('#n-verify');
+  if(vBtn) vBtn.onclick = async ()=>{
+    vBtn.disabled = true; vBtn.textContent = 'Verificando…';
+    try{
+      const r = await api('/telegram/verify',{method:'POST'});
+      if(r.linked){ ov.remove(); toast('🔔 Telegram vinculado ✦'); openNotif(); }
+      else{
+        $('#n-err').textContent = 'Aún no me llega tu START. Dale a INICIAR en el bot y verifica de nuevo.';
+        vBtn.disabled = false; vBtn.textContent = '2️⃣ Ya le di START — Verificar';
+      }
+    }catch(e){ $('#n-err').textContent = e.message; vBtn.disabled = false; vBtn.textContent = '2️⃣ Ya le di START — Verificar'; }
+  };
+  const tBtn = $('#n-test');
+  if(tBtn) tBtn.onclick = async ()=>{
+    try{ await api('/telegram/test',{method:'POST'}); toast('Mensaje de prueba enviado ✦'); }
+    catch(e){ toast(e.message); }
+  };
+  const uBtn = $('#n-unlink');
+  if(uBtn) uBtn.onclick = async ()=>{
+    if(!confirm('¿Dejar de recibir avisos en Telegram?')) return;
+    try{ await api('/telegram/unlink',{method:'POST'}); ov.remove(); toast('Telegram desvinculado'); }
+    catch(e){ toast(e.message); }
+  };
+  const sBtn = $('#n-savetoken');
+  if(sBtn) sBtn.onclick = async ()=>{
+    const tok = $('#n-token').value.trim();
+    if(!tok){ $('#n-err2').textContent = 'Pega el token que te dio @BotFather.'; return; }
+    sBtn.disabled = true; sBtn.textContent = 'Comprobando…';
+    try{
+      const r = await api('/telegram/token',{method:'POST',body:JSON.stringify({token:tok})});
+      ov.remove(); toast(`Bot @${r.bot_username} conectado ✦`); openNotif();
+    }catch(e){ $('#n-err2').textContent = e.message; sBtn.disabled = false; sBtn.textContent = 'Guardar bot'; }
+  };
+}
+
 function renderAjustes(){
   const d = DRIVE;
   const estado = d.connected

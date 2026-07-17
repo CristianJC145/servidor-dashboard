@@ -11,6 +11,7 @@ import json
 import shutil
 import tarfile
 import tempfile
+import threading
 import time
 import sqlite3
 import secrets
@@ -152,6 +153,8 @@ def init_db():
         ("task_files", "storage", "ALTER TABLE task_files ADD COLUMN storage TEXT DEFAULT 'server'"),
         ("task_files", "drive_file_id", "ALTER TABLE task_files ADD COLUMN drive_file_id TEXT DEFAULT ''"),
         ("task_files", "size", "ALTER TABLE task_files ADD COLUMN size INTEGER DEFAULT 0"),
+        ("users", "telegram_chat_id", "ALTER TABLE users ADD COLUMN telegram_chat_id TEXT DEFAULT ''"),
+        ("users", "telegram_code", "ALTER TABLE users ADD COLUMN telegram_code TEXT DEFAULT ''"),
     ]:
         cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         if col not in cols:
@@ -537,6 +540,13 @@ def create_task(body: TaskCreate, admin: dict = Depends(require_admin)):
     )
     conn.commit()
     t = task_full(conn, cur.lastrowid)
+    # 🔔 nueva tarea: avisar al asignado (y a los demás admins)
+    dest = admin_ids(conn) + ([body.assigned_to] if body.assigned_to else [])
+    notify_users(conn, dest,
+                 f"📥 <b>Nueva tarea:</b> {t['title']}\n"
+                 f"Canal: {t['channel'] or '—'}"
+                 + (f"\nAsignada a: {t['assigned_name']}" if t.get('assigned_name') else ""),
+                 exclude=admin["id"])
     conn.close()
     return t
 
@@ -604,9 +614,28 @@ def patch_task(task_id: int, body: TaskPatch, user: dict = Depends(get_current_u
         params.append(task_id)
         conn.execute(f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?", params)
         conn.commit()
-    t = task_full(conn, task_id)
+    tt = task_full(conn, task_id)
+    # 🔔 avisos por Telegram (sin notificar a quien hizo la acción)
+    quien = user["display_name"]
+    if body.assigned_to is not None and body.assigned_to != t["assigned_to"] and body.assigned_to:
+        notify_users(conn, [body.assigned_to],
+                     f"📥 <b>Te asignaron una tarea:</b> {tt['title']}\nCanal: {tt['channel'] or '—'}",
+                     exclude=user["id"])
+    if body.status is not None and body.status != t["status"]:
+        if body.status == "revision":
+            notify_users(conn, admin_ids(conn) + [tt["assigned_to"]],
+                         f"🟠 <b>En revisión:</b> {tt['title']}\nLa pasó: {quien}",
+                         exclude=user["id"])
+        elif body.status == "terminado":
+            notify_users(conn, admin_ids(conn) + [tt["assigned_to"]],
+                         f"✅ <b>Terminada:</b> {tt['title']}\nLa terminó: {quien}",
+                         exclude=user["id"])
+        elif body.status == "pendiente" and t["status"] in ("revision", "terminado"):
+            notify_users(conn, admin_ids(conn) + [tt["assigned_to"]],
+                         f"↩️ <b>Volvió a pendiente:</b> {tt['title']}\nLa movió: {quien}",
+                         exclude=user["id"])
     conn.close()
-    return t
+    return tt
 
 
 @app.delete("/api/tasks/{task_id}")
@@ -1575,10 +1604,164 @@ def finish_task(task_id: int, body: FinishBody, user: dict = Depends(get_current
             cleaned += 1
     conn.commit()
     result = task_full(conn, task_id)
+    # 🔔 avisar: tarea terminada y archivada
+    notify_users(conn, admin_ids(conn) + [t["assigned_to"]],
+                 f"✅ <b>Terminada y archivada:</b> {result['title']}\n"
+                 f"Canal: {result['channel'] or '—'}\nLa terminó: {user['display_name']}"
+                 + ("\n📁 Material guardado en Drive" if result.get("drive_folder_id") else ""),
+                 exclude=user["id"])
     conn.close()
     result["cleaned_files"] = cleaned
     result["links_saved"] = links_saved
     return result
+
+
+# ---------------------------------------------------------------- notificaciones Telegram
+
+
+def _tg_api(token: str, method: str, payload: dict = None, timeout: float = 12):
+    data = json.dumps(payload).encode() if payload is not None else None
+    return _http_json(
+        "POST", f"https://api.telegram.org/bot{token}/{method}",
+        {"Content-Type": "application/json"}, data, timeout=timeout)
+
+
+def tg_send_async(token: str, chat_ids: list, text: str):
+    """Envía el mensaje en segundo plano para no frenar la respuesta al usuario."""
+    def run():
+        for cid in chat_ids:
+            try:
+                _tg_api(token, "sendMessage", {"chat_id": cid, "text": text, "parse_mode": "HTML"})
+            except Exception:
+                pass
+    threading.Thread(target=run, daemon=True).start()
+
+
+def notify_users(conn, user_ids, text: str, exclude: int = None):
+    """Notifica por Telegram a los usuarios vinculados (menos a quien hizo la acción)."""
+    token = cfg_get(conn, "telegram_bot_token")
+    if not token:
+        return
+    ids = {u for u in user_ids if u and u != exclude}
+    if not ids:
+        return
+    marks = ",".join("?" * len(ids))
+    chats = [r["telegram_chat_id"] for r in conn.execute(
+        f"SELECT telegram_chat_id FROM users WHERE id IN ({marks}) AND telegram_chat_id != '' AND active=1",
+        list(ids)).fetchall()]
+    if chats:
+        tg_send_async(token, chats, text)
+
+
+def admin_ids(conn):
+    return [r["id"] for r in conn.execute(
+        "SELECT id FROM users WHERE role='admin' AND active=1").fetchall()]
+
+
+class TgToken(BaseModel):
+    token: str
+
+
+@app.get("/api/telegram/status")
+def telegram_status(user: dict = Depends(get_current_user)):
+    conn = db()
+    token = cfg_get(conn, "telegram_bot_token")
+    bot = cfg_get(conn, "telegram_bot_username")
+    me = conn.execute("SELECT telegram_chat_id FROM users WHERE id = ?", (user["id"],)).fetchone()
+    conn.close()
+    return {"configured": bool(token), "bot_username": bot or "",
+            "linked": bool(me and me["telegram_chat_id"])}
+
+
+@app.post("/api/telegram/token")
+def telegram_set_token(body: TgToken, admin: dict = Depends(require_admin)):
+    token = body.token.strip()
+    status, _, info = _tg_api(token, "getMe")
+    if status != 200 or not info.get("ok"):
+        raise HTTPException(400, "Token inválido. Copia el token completo que te dio @BotFather.")
+    conn = db()
+    cfg_set(conn, "telegram_bot_token", token)
+    cfg_set(conn, "telegram_bot_username", info["result"].get("username", ""))
+    conn.commit()
+    conn.close()
+    return {"ok": True, "bot_username": info["result"].get("username", "")}
+
+
+@app.post("/api/telegram/link")
+def telegram_link(user: dict = Depends(get_current_user)):
+    """Genera el código de vinculación y el link t.me para este usuario."""
+    conn = db()
+    token = cfg_get(conn, "telegram_bot_token")
+    bot = cfg_get(conn, "telegram_bot_username")
+    if not (token and bot):
+        conn.close()
+        raise HTTPException(400, "El administrador aún no configura el bot de Telegram.")
+    code = secrets.token_hex(4)
+    conn.execute("UPDATE users SET telegram_code = ? WHERE id = ?", (code, user["id"]))
+    conn.commit()
+    conn.close()
+    return {"code": code, "url": f"https://t.me/{bot}?start={code}"}
+
+
+@app.post("/api/telegram/verify")
+def telegram_verify(user: dict = Depends(get_current_user)):
+    """Lee los mensajes nuevos del bot y vincula los códigos /start recibidos."""
+    conn = db()
+    token = cfg_get(conn, "telegram_bot_token")
+    if not token:
+        conn.close()
+        raise HTTPException(400, "El bot no está configurado.")
+    offset = cfg_get(conn, "telegram_offset")
+    params = {"timeout": 0}
+    if offset:
+        params["offset"] = int(offset)
+    status, _, info = _tg_api(token, "getUpdates", params)
+    if status == 200 and info.get("ok"):
+        last = None
+        for up in info.get("result", []):
+            last = up["update_id"]
+            msg = up.get("message") or {}
+            text = (msg.get("text") or "").strip()
+            chat = msg.get("chat", {}).get("id")
+            if text.startswith("/start") and chat:
+                parts = text.split()
+                code = parts[1] if len(parts) > 1 else ""
+                row = conn.execute(
+                    "SELECT id, display_name FROM users WHERE telegram_code = ? AND telegram_code != ''",
+                    (code,)).fetchone()
+                if row:
+                    conn.execute(
+                        "UPDATE users SET telegram_chat_id = ?, telegram_code = '' WHERE id = ?",
+                        (str(chat), row["id"]))
+                    tg_send_async(token, [str(chat)],
+                                  f"🔔 ¡Hola {row['display_name']}! Notificaciones de SERVIDOR YOUTUBE activadas ✓")
+        if last is not None:
+            cfg_set(conn, "telegram_offset", str(last + 1))
+        conn.commit()
+    me = conn.execute("SELECT telegram_chat_id FROM users WHERE id = ?", (user["id"],)).fetchone()
+    conn.close()
+    return {"linked": bool(me and me["telegram_chat_id"])}
+
+
+@app.post("/api/telegram/test")
+def telegram_test(user: dict = Depends(get_current_user)):
+    conn = db()
+    token = cfg_get(conn, "telegram_bot_token")
+    me = conn.execute("SELECT telegram_chat_id FROM users WHERE id = ?", (user["id"],)).fetchone()
+    conn.close()
+    if not (token and me and me["telegram_chat_id"]):
+        raise HTTPException(400, "Tu Telegram no está vinculado.")
+    tg_send_async(token, [me["telegram_chat_id"]], "✅ Prueba de notificación — todo funciona.")
+    return {"ok": True}
+
+
+@app.post("/api/telegram/unlink")
+def telegram_unlink(user: dict = Depends(get_current_user)):
+    conn = db()
+    conn.execute("UPDATE users SET telegram_chat_id = '', telegram_code = '' WHERE id = ?", (user["id"],))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- copia de seguridad
