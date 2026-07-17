@@ -627,12 +627,8 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 .filerow .stbadge.server{color:var(--blue); background:var(--blue-soft)}
 
 /* ============ responsive ============ */
-@media(max-width:600px){
-  .tgrid{grid-template-columns:1fr}
-  .sttab{min-width:100%; max-width:none}
-}
 @media(max-width:960px){
-  .shell{grid-template-columns:1fr}
+  .shell{grid-template-columns:1fr; grid-template-rows:auto 1fr}
   .side{
     position:static; height:auto; flex-direction:row; align-items:center; flex-wrap:wrap;
     border-right:none; border-bottom:1px solid var(--line-soft); padding:14px 18px; gap:4px;
@@ -644,6 +640,76 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
   .side .foot{margin-top:0; margin-left:auto; border-top:none; padding:0}
   .side .foot .who span{display:none}
   .main{padding:22px 18px 80px}
+}
+/* ---- celular ---- */
+@media(max-width:700px){
+  body{font-size:15px}
+  /* barra superior compacta: marca arriba, navegación deslizable abajo */
+  .side{padding:10px 12px 0; gap:0; row-gap:0}
+  .side .wordmark{width:100%; padding:2px 110px 8px 4px; font-size:16px}
+  .nav-item{padding:10px 11px; font-size:13.5px; gap:8px; border-radius:10px 10px 0 0}
+  .nav-item svg{width:17px;height:17px}
+  .nav-item .badge{margin-left:4px}
+  .side .foot{position:absolute; top:10px; right:12px; margin:0}
+  .side .foot .who b{max-width:90px; font-size:12px}
+  .side{position:relative}
+  .main{padding:18px 14px 80px}
+  /* encabezados */
+  .pagehead{margin-bottom:18px; align-items:flex-start}
+  .pagehead h1{font-size:22px}
+  .pagehead .sub{font-size:10.5px; letter-spacing:.1em; margin-top:5px}
+  .pagehead .actions{width:100%}
+  .pagehead .actions .btn{flex:1}
+  .backlink{margin-bottom:6px}
+  /* rejillas a una columna */
+  .chgrid{grid-template-columns:1fr; gap:14px}
+  .tgrid{grid-template-columns:1fr; gap:12px}
+  .team-grid{grid-template-columns:1fr}
+  .chcard{padding:20px 18px 18px}
+  .chcard .chname{font-size:16px}
+  /* chips de estado: los 3 en UNA fila compacta */
+  .sttabs{gap:7px; margin:2px 0 16px}
+  .sttab{min-width:0; max-width:none; padding:10px 10px; font-size:12.5px; gap:7px; border-radius:12px}
+  .sttab .n{font-size:10.5px; padding:1px 7px}
+  /* panel almacenamiento: dona arriba, stats abajo */
+  .storpanel{padding:18px 16px; border-radius:18px; margin-bottom:18px}
+  .stor-flex{gap:18px; justify-content:center}
+  .stor-gauge{width:150px; height:150px}
+  .stor-stats{width:100%}
+  /* modales a pantalla casi completa */
+  .overlay{padding:3vh 8px}
+  .modal{padding:20px 16px; border-radius:18px}
+  .modal h2{font-size:17px}
+  .modal-actions .btn{flex:1 1 auto; text-align:center; padding:12px 12px}
+  .status-actions{flex-wrap:wrap}
+  /* filas de archivos: que los botones bajen de línea sin romperse */
+  .filerow{flex-wrap:wrap; row-gap:6px}
+  .filerow a{flex:1 1 100%; order:2}
+  .filerow .kind{order:1}
+  .filerow .dl{order:3; font-size:12px; padding:4px 10px}
+  .filerow button{order:4; margin-left:auto}
+  /* agregar link: nombre arriba, link+botón abajo */
+  .linkadd{flex-wrap:wrap}
+  .linkadd input[id$="linkname"]{flex:1 1 100% !important}
+  /* resultados de búsqueda */
+  .sr-row{flex-wrap:wrap; gap:8px; padding:12px 12px}
+  .sr-main{flex:1 1 100%; order:1}
+  .sr-kind{order:0}
+  .sr-drive,.sr-dl{order:2; font-size:11.5px; padding:5px 9px}
+  .sr-open{display:none}
+  .sr-meta{flex-wrap:wrap}
+  .searchbar input{font-size:16px; padding:12px 0}
+  /* ajustes: filas de servidores */
+  .srvrow{flex-wrap:wrap; row-gap:8px}
+  .srvinfo{flex:1 1 55%}
+  .panelcard{padding:18px 14px}
+  .drive-actions{flex-wrap:wrap}
+  .drive-actions .btn{flex:1 1 auto}
+  /* modal archivar */
+  .arch-dest{font-size:11px}
+  .dropzone{padding:16px 10px}
+  /* inputs no provocan zoom en iPhone si tienen ≥16px */
+  input,select,textarea{font-size:16px}
 }
 @media (prefers-reduced-motion:no-preference){
   .task,.modal,.chcard,.member{animation:up .2s ease}
