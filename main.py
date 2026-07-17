@@ -457,6 +457,7 @@ def list_tasks(
     status: Optional[str] = None,
     assigned_to: Optional[int] = None,
     channel: Optional[str] = None,
+    with_files: int = 0,
     user: dict = Depends(get_current_user),
 ):
     conn = db()
@@ -481,8 +482,21 @@ def list_tasks(
     q += """ ORDER BY CASE t.priority WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
              CASE WHEN t.due_date = '' THEN 1 ELSE 0 END, t.due_date, t.created_at DESC"""
     rows = conn.execute(q, params).fetchall()
+    out = [dict(r) for r in rows]
+    # con with_files=1 cada tarea trae sus adjuntos (para mostrarlos en Pendientes)
+    if with_files and out:
+        ids = [t["id"] for t in out]
+        marks = ",".join("?" * len(ids))
+        fmap: dict = {}
+        for f in conn.execute(
+            f"SELECT id, task_id, label, url, kind, storage, drive_file_id, size "
+            f"FROM task_files WHERE task_id IN ({marks}) ORDER BY created_at", ids
+        ).fetchall():
+            fmap.setdefault(f["task_id"], []).append(dict(f))
+        for t in out:
+            t["files"] = fmap.get(t["id"], [])
     conn.close()
-    return [dict(r) for r in rows]
+    return out
 
 
 @app.get("/api/tasks/{task_id}")

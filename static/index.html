@@ -368,6 +368,15 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 .drow .m{display:flex; gap:8px; align-items:center; margin-top:5px; font-size:11.5px; color:var(--muted); flex-wrap:wrap}
 .drow .m .ch{color:var(--blue)}
 .drow .m .who{margin-left:auto; display:inline-flex; align-items:center; gap:5px}
+.drow{cursor:pointer}
+/* adjuntos descargables directo desde Pendientes */
+.drow .dfiles{display:flex; flex-direction:column; gap:6px; margin-top:10px}
+.drow .dfile{
+  display:flex; align-items:center; gap:7px; font-size:12px; font-weight:800; text-decoration:none;
+  color:var(--gold); border:1px solid rgba(255,178,76,.32); background:rgba(255,178,76,.06);
+  border-radius:9px; padding:7px 11px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+}
+.drow .dfile:hover{border-color:var(--gold); background:rgba(255,178,76,.13); text-decoration:none}
 
 /* ============ dropzone ============ */
 .dropzone{
@@ -675,9 +684,9 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
     overflow:auto; background:rgba(14,10,7,.97);
     border-right:1px solid var(--line); border-bottom:none;
     box-shadow:30px 0 60px -30px rgba(0,0,0,.8);
-    animation:slidein .22s var(--ease);
+    animation:navslidein .22s var(--ease);
   }
-  @keyframes slidein{from{transform:translateX(-40px); opacity:.6} to{transform:none; opacity:1}}
+  @keyframes navslidein{from{transform:translateX(-40px); opacity:.6} to{transform:none; opacity:1}}
   body.navopen .side .nav-item{display:flex; width:100%; border-radius:12px; padding:13px 14px; font-size:15px}
   body.navopen .side .wordmark{padding:2px 48px 20px 4px; white-space:normal; font-size:14.5px}
   body.navopen .menuburger{position:absolute; top:14px; right:12px; margin:0}
@@ -1139,10 +1148,24 @@ function renderCanal(){
 function setSt(s){ VIEW.st = s; renderCanal(); }
 
 /* =============================== drawer: pendientes generales =============================== */
-function openDrawer(){
+async function openDrawer(){
   closeDrawer();
   document.body.classList.remove('navopen');
-  const pend = pendientesAll();
+  // pedir las pendientes CON sus adjuntos, para que el material se descargue desde aquí
+  let pend;
+  try{ pend = await api('/tasks?status=pendiente&with_files=1'); }
+  catch(e){ pend = pendientesAll(); }
+
+  const fileBtn = f=>{
+    if(f.kind==='link')
+      return `<a class="dfile" href="${esc(f.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🔗 ${esc(f.label)}</a>`;
+    const href = f.storage==='drive'
+      ? (f.drive_file_id?`https://drive.google.com/uc?export=download&id=${esc(f.drive_file_id)}`:'')
+      : (f.url||'');
+    if(!href) return '';
+    return `<a class="dfile" href="${esc(href)}" ${f.storage==='drive'?'target="_blank" rel="noopener"':`download="${esc(f.label)}"`} onclick="event.stopPropagation()">⬇ ${esc(f.label)}</a>`;
+  };
+
   const bd = document.createElement('div'); bd.className='drawer-backdrop';
   bd.onclick = closeDrawer;
   const dr = document.createElement('div'); dr.className='drawer';
@@ -1150,13 +1173,13 @@ function openDrawer(){
     <h2>Pendientes generales <span style="letter-spacing:0">· ${pend.length}</span>
       <button class="x" onclick="closeDrawer()">✕</button></h2>
     ${pend.map(t=>`
-      <button class="drow" onclick="closeDrawer();jumpToTask(${t.id},'${esc(t.channel||'').replace(/'/g,"\\'")}')">
+      <div class="drow" role="button" tabindex="0"
+        onclick="closeDrawer();jumpToTask(${t.id},'${esc(t.channel||'').replace(/'/g,"\\'")}')"
+        onkeydown="if(event.key==='Enter'){closeDrawer();jumpToTask(${t.id},'${esc(t.channel||'').replace(/'/g,"\\'")}')}">
         <div class="t">${esc(t.title)}</div>
-        <div class="m">
-          <span class="ch">${t.channel?esc(t.channel):'— sin canal —'}</span>
-          <span class="who">${t.assigned_name?`<span class="mini-av" style="width:17px;height:17px;font-size:9px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--violet-soft);border:1px solid rgba(140,123,255,.5);color:var(--violet)">${esc(t.assigned_name[0]?.toUpperCase())}</span> ${esc(t.assigned_name)}`:'sin asignar'}</span>
-        </div>
-      </button>`).join('') || '<div class="empty" style="padding:26px">Nada pendiente. ✦</div>'}
+        <div class="m"><span class="ch">${t.channel?esc(t.channel):'— sin canal —'}</span></div>
+        ${(t.files||[]).length?`<div class="dfiles">${t.files.map(fileBtn).join('')}</div>`:''}
+      </div>`).join('') || '<div class="empty" style="padding:26px">Nada pendiente. ✦</div>'}
   `;
   document.body.appendChild(bd); document.body.appendChild(dr);
 }
