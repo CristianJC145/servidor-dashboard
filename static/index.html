@@ -794,6 +794,7 @@ const ICONS = {
   buscar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg>',
   ajustes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4 6l2.2 1.3M17.8 16.7L20 18M20 6l-2.2 1.3M6.2 16.7L4 18"/></svg>',
   drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M8 3h8l6 10.5h-8z" opacity=".55"/><path d="M2 13.5 8 3l4 7-6 10.5z"/><path d="M22 13.5 18.5 20H6l3.5-6.5z" opacity=".8"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></svg>',
 };
 
 async function api(path, opts = {}) {
@@ -914,6 +915,7 @@ function renderApp(){
       <button class="nav-item" id="nav-pend" onclick="openDrawer()">${ICONS.pend}<span>Pendientes</span>
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
       <button class="nav-item" id="nav-buscar" onclick="setView({name:'buscar'})">${ICONS.buscar}<span>Buscar</span></button>
+      <button class="nav-item" id="nav-refresh" onclick="refreshApp()" title="Traer lo último del servidor">${ICONS.refresh}<span>Actualizar</span></button>
       ${isAdmin?`<button class="nav-item" id="nav-equipo" onclick="setView({name:'equipo'})">${ICONS.equipo}<span>Equipo</span></button>`:''}
       ${isAdmin?`<button class="nav-item" id="nav-ajustes" onclick="setView({name:'ajustes'})">${ICONS.ajustes}<span>Ajustes</span>
         ${DRIVE.has_credentials&&!DRIVE.connected?'<em class="badge" style="background:var(--danger)">!</em>':''}</button>`:''}
@@ -930,6 +932,21 @@ function renderApp(){
 }
 
 function setView(v){ VIEW=v; document.body.classList.remove('navopen'); paintView(); }
+
+/* botón Actualizar: trae lo último del servidor (nuevas tareas, archivos, links) */
+let REFRESHING = false;
+async function refreshApp(){
+  if(REFRESHING) return;
+  REFRESHING = true;
+  const btn = $('#nav-refresh');
+  if(btn){ btn.style.opacity='.5'; btn.querySelector('span').textContent='Actualizando…'; }
+  try{
+    await refresh();
+    renderApp();
+    toast('Actualizado ✦');
+  }catch(e){ toast(e.message); }
+  REFRESHING = false;
+}
 
 function paintView(){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('on'));
@@ -1416,12 +1433,7 @@ async function openTask(id){
     <select id="d-assign">
       <option value="">— Sin asignar —</option>
       ${USERS.filter(u=>u.active).map(u=>`<option value="${u.id}" ${t.assigned_to===u.id?'selected':''}>${esc(u.display_name)}</option>`).join('')}
-    </select>`:(t.assigned_name?`
-    <label>Asignada a</label>
-    <div style="display:flex;align-items:center;gap:8px;font-size:13.5px">
-      <span class="mini-av" style="width:22px;height:22px;border-radius:50%;background:var(--violet-soft);border:1px solid rgba(140,123,255,.5);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--violet)">${esc(t.assigned_name[0]?.toUpperCase())}</span>
-      ${esc(t.assigned_name)}
-    </div>`:'')}
+    </select>`:''}
 
     <div class="divider"></div>
     <label style="margin-top:10px">Adjuntos de trabajo · <span style="color:var(--blue)">servidor</span></label>
@@ -1433,6 +1445,7 @@ async function openTask(id){
         ${(isAdmin||f.added_by===ME.id)?`<button title="Quitar" onclick="delFile(${f.id},${t.id})">✕</button>`:''}
       </div>`).join('') || '<div style="font-size:13px;color:var(--dim)">Aún no hay adjuntos.</div>'}
     </div>
+    ${isAdmin?`
     <div class="dropzone" id="d-dz" style="padding:14px 12px">
       <span style="font-size:16px">⇪</span> Suelta guion, miniatura o música aquí (queda en el servidor)
     </div>
@@ -1441,7 +1454,7 @@ async function openTask(id){
       <input id="d-linkname" placeholder="Nombre (ej: Guion en Docs)" autocomplete="off" style="flex:0 0 34%">
       <input id="d-link" placeholder="🔗 pega el link aquí" autocomplete="off">
       <button class="btn ghost sm" id="d-linkbtn" type="button">Añadir link</button>
-    </div>
+    </div>`:''}
 
     <label style="margin-top:16px">Material del proyecto · <span style="color:var(--gold)">Google Drive</span></label>
     ${videoFinalHTML(t, videos)}
@@ -1458,7 +1471,7 @@ async function openTask(id){
   document.body.appendChild(ov);
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
 
-  wireDropzone($('#d-dz'), $('#d-file'), async files=>{
+  if($('#d-dz')) wireDropzone($('#d-dz'), $('#d-file'), async files=>{
     const dz = $('#d-dz');
     try{
       for(let i=0;i<files.length;i++){
