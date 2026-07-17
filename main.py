@@ -1605,7 +1605,11 @@ async def restore_backup(file: UploadFile = File(...), admin: dict = Depends(req
                 raise ValueError()
         except Exception:
             raise HTTPException(400, "El archivo no parece una base de datos del SERVIDOR.")
-        os.replace(newdb, DB_PATH)
+        # copiar primero al mismo disco que la DB y reemplazar de forma atómica
+        # (os.replace directo falla si /tmp y /data son discos distintos, como en Docker)
+        staging = DB_PATH + ".restore"
+        shutil.copy2(newdb, staging)
+        os.replace(staging, DB_PATH)
         up = os.path.join(td, "uploads")
         if os.path.isdir(up):
             os.makedirs(UPLOADS_DIR, exist_ok=True)
