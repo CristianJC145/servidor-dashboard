@@ -540,9 +540,8 @@ def create_task(body: TaskCreate, admin: dict = Depends(require_admin)):
     )
     conn.commit()
     t = task_full(conn, cur.lastrowid)
-    # 🔔 nueva tarea: avisar al asignado (y a los demás admins)
-    dest = admin_ids(conn) + ([body.assigned_to] if body.assigned_to else [])
-    notify_users(conn, dest,
+    # 🔔 nueva tarea: avisar a TODO el equipo
+    notify_users(conn, all_user_ids(conn),
                  f"📥 <b>Nueva tarea:</b> {t['title']}\n"
                  f"Canal: {t['channel'] or '—'}"
                  + (f"\nAsignada a: {t['assigned_name']}" if t.get('assigned_name') else ""),
@@ -623,11 +622,13 @@ def patch_task(task_id: int, body: TaskPatch, user: dict = Depends(get_current_u
                      exclude=user["id"])
     if body.status is not None and body.status != t["status"]:
         if body.status == "revision":
-            notify_users(conn, admin_ids(conn) + [tt["assigned_to"]],
+            # revisión: solo a los admins
+            notify_users(conn, admin_ids(conn),
                          f"🟠 <b>En revisión:</b> {tt['title']}\nLa pasó: {quien}",
                          exclude=user["id"])
         elif body.status == "terminado":
-            notify_users(conn, admin_ids(conn) + [tt["assigned_to"]],
+            # terminada: a TODO el equipo
+            notify_users(conn, all_user_ids(conn),
                          f"✅ <b>Terminada:</b> {tt['title']}\nLa terminó: {quien}",
                          exclude=user["id"])
         elif body.status == "pendiente" and t["status"] in ("revision", "terminado"):
@@ -1604,8 +1605,8 @@ def finish_task(task_id: int, body: FinishBody, user: dict = Depends(get_current
             cleaned += 1
     conn.commit()
     result = task_full(conn, task_id)
-    # 🔔 avisar: tarea terminada y archivada
-    notify_users(conn, admin_ids(conn) + [t["assigned_to"]],
+    # 🔔 avisar a TODO el equipo: tarea terminada y archivada
+    notify_users(conn, all_user_ids(conn),
                  f"✅ <b>Terminada y archivada:</b> {result['title']}\n"
                  f"Canal: {result['channel'] or '—'}\nLa terminó: {user['display_name']}"
                  + ("\n📁 Material guardado en Drive" if result.get("drive_folder_id") else ""),
@@ -1656,6 +1657,11 @@ def notify_users(conn, user_ids, text: str, exclude: int = None):
 def admin_ids(conn):
     return [r["id"] for r in conn.execute(
         "SELECT id FROM users WHERE role='admin' AND active=1").fetchall()]
+
+
+def all_user_ids(conn):
+    return [r["id"] for r in conn.execute(
+        "SELECT id FROM users WHERE active=1").fetchall()]
 
 
 class TgToken(BaseModel):
