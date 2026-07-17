@@ -87,6 +87,27 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 #brand-home:active{opacity:.7}
 .menuburger{display:none}
 .navback{display:none}
+/* botón flotante sutil: refresca datos sin recargar la página */
+.fab-refresh{
+  position:fixed; right:18px; bottom:18px; z-index:45;
+  width:42px; height:42px; border-radius:50%; padding:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(28,26,29,.72); border:1px solid var(--line); color:var(--dim);
+  -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur);
+  box-shadow:0 6px 18px rgba(0,0,0,.45);
+  transition:color .15s, border-color .15s, transform .2s var(--ease);
+}
+.fab-refresh svg{width:18px; height:18px}
+.fab-refresh:hover{color:var(--violet); border-color:rgba(255,106,31,.45); transform:rotate(40deg)}
+.fab-refresh.spin svg{animation:fabspin .8s linear infinite}
+@keyframes fabspin{to{transform:rotate(360deg)}}
+/* selector de rol en Equipo */
+.roleselect{
+  width:auto; flex:none; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+  padding:5px 24px 5px 10px; border-radius:9px; cursor:pointer;
+}
+.roleselect.admin{color:var(--gold); border-color:rgba(255,178,76,.45)}
+.roleselect.editor{color:var(--muted)}
 
 /* ============ shell ============ */
 .shell{display:grid; grid-template-columns:264px minmax(0,1fr); min-height:100vh}
@@ -915,7 +936,6 @@ function renderApp(){
       <button class="nav-item" id="nav-pend" onclick="openDrawer()">${ICONS.pend}<span>Pendientes</span>
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
       <button class="nav-item" id="nav-buscar" onclick="setView({name:'buscar'})">${ICONS.buscar}<span>Buscar</span></button>
-      <button class="nav-item" id="nav-refresh" onclick="refreshApp()" title="Traer lo último del servidor">${ICONS.refresh}<span>Actualizar</span></button>
       ${isAdmin?`<button class="nav-item" id="nav-equipo" onclick="setView({name:'equipo'})">${ICONS.equipo}<span>Equipo</span></button>`:''}
       ${isAdmin?`<button class="nav-item" id="nav-ajustes" onclick="setView({name:'ajustes'})">${ICONS.ajustes}<span>Ajustes</span>
         ${DRIVE.has_credentials&&!DRIVE.connected?'<em class="badge" style="background:var(--danger)">!</em>':''}</button>`:''}
@@ -927,24 +947,24 @@ function renderApp(){
     </aside>
     <div class="navback" onclick="document.body.classList.remove('navopen')"></div>
     <div class="main" id="view"></div>
-  </div>`;
+  </div>
+  <button class="fab-refresh" id="fab-refresh" title="Actualizar — traer lo último subido" aria-label="Actualizar" onclick="refreshApp()">${ICONS.refresh}</button>`;
   paintView();
 }
 
 function setView(v){ VIEW=v; document.body.classList.remove('navopen'); paintView(); }
 
-/* botón Actualizar: trae lo último del servidor (nuevas tareas, archivos, links) */
+/* botón flotante Actualizar: trae lo último del servidor (nuevas tareas, archivos, links) */
 let REFRESHING = false;
 async function refreshApp(){
   if(REFRESHING) return;
   REFRESHING = true;
-  const btn = $('#nav-refresh');
-  if(btn){ btn.style.opacity='.5'; btn.querySelector('span').textContent='Actualizando…'; }
+  $('#fab-refresh')?.classList.add('spin');
   try{
     await refresh();
     renderApp();
     toast('Actualizado ✦');
-  }catch(e){ toast(e.message); }
+  }catch(e){ toast(e.message); $('#fab-refresh')?.classList.remove('spin'); }
   REFRESHING = false;
 }
 
@@ -1571,7 +1591,11 @@ function renderEquipo(){
       <div class="top">
         <div class="avatar ${u.role==='admin'?'gold':''}">${esc(u.display_name[0]?.toUpperCase()||'?')}</div>
         <div class="who"><b>${esc(u.display_name)}</b><span>@${esc(u.username)}</span></div>
-        <span class="rolechip ${u.role}">${u.role}</span>
+        ${u.id!==ME.id?`
+        <select class="roleselect ${u.role}" title="Cambiar rol" onchange="changeRole(${u.id}, this.value)">
+          <option value="editor" ${u.role==='editor'?'selected':''}>editor</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
+        </select>`:`<span class="rolechip ${u.role}">${u.role}</span>`}
       </div>
       ${workloadHTML(u)}
       <div class="acts">
@@ -1582,6 +1606,14 @@ function renderEquipo(){
       </div>
     </div>`).join('')}
   </div>`;
+}
+
+async function changeRole(id, role){
+  try{
+    await api('/users/'+id,{method:'PATCH',body:JSON.stringify({role})});
+    await refresh(); renderEquipo();
+    toast(`Rol cambiado a ${role} ✦`);
+  }catch(e){ toast(e.message); renderEquipo(); }
 }
 
 function openNewUser(){
