@@ -77,6 +77,8 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 #brand-home{cursor:pointer; user-select:none; transition:opacity .15s}
 #brand-home:hover{opacity:.85}
 #brand-home:active{opacity:.7}
+.menuburger{display:none}
+.navback{display:none}
 
 /* ============ shell ============ */
 .shell{display:grid; grid-template-columns:264px minmax(0,1fr); min-height:100vh}
@@ -168,8 +170,8 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 .chcard:hover::before{width:58px; opacity:1}
 /* sin sangrado naranja interior — ese protagonismo es solo del panel principal */
 .chcard::after{
-  content:""; position:absolute; right:-35%; top:-55%; width:80%; height:130%; pointer-events:none;
-  background:radial-gradient(circle at 60% 45%, rgba(255,105,35,.10), transparent 60%);
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(100% 120% at 82% 10%, rgba(255,105,35,.10), rgba(255,105,35,.03) 45%, transparent 68%);
   opacity:0; transition:opacity .4s var(--ease);
 }
 .chcard:hover::after{opacity:1}
@@ -213,8 +215,8 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
   -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur);
 }
 .storpanel::after{
-  content:""; position:absolute; left:-20%; top:-60%; width:70%; height:170%; pointer-events:none;
-  background:radial-gradient(circle at 40% 45%, rgba(255,105,35,.20), transparent 62%);
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 130% at 12% 22%, rgba(255,105,35,.18), rgba(255,105,35,.05) 45%, transparent 70%);
 }
 .storpanel > *{position:relative; z-index:1}
 .stor-head{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:8px}
@@ -422,8 +424,8 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
   overflow:hidden;
 }
 .modal::after{
-  content:""; position:absolute; right:-15%; top:-25%; width:60%; height:80%; pointer-events:none; z-index:0;
-  background:radial-gradient(circle at 60% 40%, rgba(255,120,40,.14), transparent 60%);
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:radial-gradient(95% 85% at 88% 6%, rgba(255,120,40,.13), rgba(255,120,40,.04) 45%, transparent 68%);
 }
 .modal > *{position:relative; z-index:1}
 .modal h2{font-size:19px; margin-bottom:4px; line-height:1.3; letter-spacing:-.01em}
@@ -647,15 +649,39 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 /* ---- celular ---- */
 @media(max-width:700px){
   body{font-size:15px}
-  /* barra superior compacta: marca arriba, navegación deslizable abajo */
-  .side{padding:10px 12px 0; gap:0; row-gap:0}
-  .side .wordmark{width:100%; padding:2px 110px 8px 4px; font-size:16px}
-  .nav-item{padding:10px 11px; font-size:13.5px; gap:8px; border-radius:10px 10px 0 0}
-  .nav-item svg{width:17px;height:17px}
-  .nav-item .badge{margin-left:4px}
-  .side .foot{position:absolute; top:10px; right:12px; margin:0}
+  /* barra superior: hamburguesa ☰ + logo + avatar; el menú vive en un cajón izquierdo */
+  .side{position:relative; padding:10px 12px; gap:0; flex-wrap:nowrap; align-items:center}
+  .menuburger{
+    display:flex; align-items:center; justify-content:center; flex:none;
+    width:40px; height:40px; margin-right:12px; font-size:17px; line-height:1;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:11px; color:var(--ink);
+  }
+  .side .wordmark{padding:0; font-size:16px; white-space:nowrap}
+  .side .nav-item{display:none}
+  .side .foot{position:absolute; top:12px; right:12px; margin:0}
   .side .foot .who{display:none}
-  .side{position:relative}
+  /* cajón abierto: el sidebar completo se desliza desde la izquierda */
+  body.navopen .side{
+    position:fixed; top:0; left:0; bottom:0; width:280px; height:100dvh; z-index:60;
+    flex-direction:column; align-items:stretch; flex-wrap:nowrap; padding:20px 14px;
+    overflow:auto; background:rgba(14,10,7,.97);
+    border-right:1px solid var(--line); border-bottom:none;
+    box-shadow:30px 0 60px -30px rgba(0,0,0,.8);
+    animation:slidein .22s var(--ease);
+  }
+  @keyframes slidein{from{transform:translateX(-40px); opacity:.6} to{transform:none; opacity:1}}
+  body.navopen .side .nav-item{display:flex; width:100%; border-radius:12px; padding:13px 14px; font-size:15px}
+  body.navopen .side .wordmark{padding:2px 48px 20px 4px; white-space:normal; font-size:14.5px}
+  body.navopen .menuburger{position:absolute; top:14px; right:12px; margin:0}
+  body.navopen .side .foot{
+    position:static; margin-top:auto; border-top:1px solid var(--line-soft);
+    padding:14px 6px 0; width:100%;
+  }
+  body.navopen .side .foot .who{display:block}
+  body.navopen .navback{
+    display:block; position:fixed; inset:0; z-index:55;
+    background:rgba(5,3,2,.6); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+  }
   .main{padding:18px 14px 80px}
   /* encabezados */
   .pagehead{margin-bottom:18px; align-items:flex-start}
@@ -862,6 +888,8 @@ function renderApp(){
   $('#app').innerHTML = `
   <div class="shell">
     <aside class="side">
+      <button class="menuburger" type="button" aria-label="Abrir menú"
+        onclick="document.body.classList.toggle('navopen')">☰</button>
       <div class="wordmark" id="brand-home" role="button" tabindex="0" title="Ir al inicio"
         onclick="setView({name:'canales'})"
         onkeydown="if(event.key==='Enter')setView({name:'canales'})">SERVIDOR <span>YOUTUBE</span><small>CENTRO DE OPERACIONES</small></div>
@@ -878,12 +906,13 @@ function renderApp(){
         <button class="linkbtn" onclick="logout()" title="Cerrar sesión">Salir</button>
       </div>
     </aside>
+    <div class="navback" onclick="document.body.classList.remove('navopen')"></div>
     <div class="main" id="view"></div>
   </div>`;
   paintView();
 }
 
-function setView(v){ VIEW=v; paintView(); }
+function setView(v){ VIEW=v; document.body.classList.remove('navopen'); paintView(); }
 
 function paintView(){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('on'));
@@ -1104,6 +1133,7 @@ function setSt(s){ VIEW.st = s; renderCanal(); }
 /* =============================== drawer: pendientes generales =============================== */
 function openDrawer(){
   closeDrawer();
+  document.body.classList.remove('navopen');
   const pend = pendientesAll();
   const bd = document.createElement('div'); bd.className='drawer-backdrop';
   bd.onclick = closeDrawer;
