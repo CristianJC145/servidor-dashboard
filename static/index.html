@@ -1430,10 +1430,12 @@ async function openTask(id){
   const adjuntos = t.files.filter(f=>f.storage!=='drive');
   const videos   = t.files.filter(f=>f.storage==='drive');
 
+  // puede terminar: el admin, o el editor si la tarea es suya (o está sin asignar)
+  const canFinish = isAdmin || !t.assigned_to || t.assigned_to===ME.id;
   const nextBtns = [];
   if(t.status==='pendiente')  nextBtns.push(['revision','▶ Ya está en revisión','']);
   if(t.status==='revision'){
-    if(isAdmin) nextBtns.push(['terminado','✦ Marcar terminado','gold']);
+    if(canFinish) nextBtns.push(['terminado','✦ Marcar terminado','gold']);
     nextBtns.push(['pendiente','Volver a pendiente','ghost']);
   }
   if(t.status==='terminado' && isAdmin) nextBtns.push(['revision','Reabrir','ghost']);

@@ -542,10 +542,10 @@ def create_task(body: TaskCreate, admin: dict = Depends(require_admin)):
 
 
 # Un editor puede mover pendiente ↔ revisión (así todos ven qué está en revisión).
-# "terminado" lo marca solo el administrador.
+# El editor puede terminar la tarea (con archivado a Drive); reabrir es solo del admin.
 EDITOR_TRANSITIONS = {
     "pendiente": {"revision"},
-    "revision": {"pendiente"},
+    "revision": {"pendiente", "terminado"},
 }
 
 
@@ -1523,14 +1523,18 @@ class FinishBody(BaseModel):
 
 
 @app.post("/api/tasks/{task_id}/finish")
-def finish_task(task_id: int, body: FinishBody, admin: dict = Depends(require_admin)):
+def finish_task(task_id: int, body: FinishBody, user: dict = Depends(get_current_user)):
     """Marca la tarea como terminada. Si el material quedó archivado en Drive,
-    limpia del servidor los adjuntos subidos (ya no tiene sentido guardarlos)."""
+    limpia del servidor los adjuntos subidos (ya no tiene sentido guardarlos).
+    Puede terminarla el admin, o el editor si la tarea es suya (o no está asignada)."""
     conn = db()
     t = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if not t:
         conn.close()
         raise HTTPException(404, "Tarea no encontrada.")
+    if user["role"] != "admin" and t["assigned_to"] not in (None, user["id"]):
+        conn.close()
+        raise HTTPException(403, "Esta tarea está asignada a otra persona.")
     conn.execute(
         "UPDATE tasks SET status = 'terminado', completed_at = ?, updated_at = ? WHERE id = ?",
         (now(), now(), task_id),
