@@ -908,6 +908,10 @@ body.panelfull .main{max-width:none; margin:0; padding:16px 20px 0}
 body.panelfull .fab-refresh{display:none}
 body.panelfull .panelframe{height:calc(100vh - 66px); border:0; border-radius:0}
 @media (max-width:700px){ body.panelfull .main{padding:12px 12px 0} body.panelfull .panelframe{height:calc(100vh - 56px)} }
+/* contenedor persistente del panel: se monta una vez y queda vivo (no recarga al reentrar) */
+.panelhost{position:fixed; inset:0; z-index:30; display:none; flex-direction:column; background:#060607; padding:16px 20px 0}
+.panelhost .panelframe{flex:1; height:auto; min-height:0; margin:0; border:0; border-radius:0}
+@media (max-width:700px){ .panelhost{padding:10px 12px 0} }
 .member .panelgrant{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12.5px}
 .member .panelgrant .switch{cursor:pointer; user-select:none}
 </style>
@@ -1005,6 +1009,7 @@ async function refresh(){
 function logout(call=true){
   if(call) api('/logout', {method:'POST'}).catch(()=>{});
   TOKEN=null; ME=null; localStorage.removeItem('srv_token');
+  if(PANEL_HOST){ PANEL_HOST.remove(); PANEL_HOST=null; }  // descarga el panel persistente
   renderLogin(false);
 }
 
@@ -1115,6 +1120,7 @@ function paintView(){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('on'));
   // el Panel de canales ocupa toda la pantalla (oculta el menú del servidor)
   document.body.classList.toggle('panelfull', VIEW.name==='panel');
+  if(PANEL_HOST && VIEW.name!=='panel') PANEL_HOST.style.display = 'none';
   if(VIEW.name==='equipo'){ $('#nav-equipo')?.classList.add('on'); renderEquipo(); }
   else if(VIEW.name==='ajustes'){ $('#nav-ajustes')?.classList.add('on'); renderAjustes(); }
   else if(VIEW.name==='buscar'){ $('#nav-buscar')?.classList.add('on'); renderBuscar(); }
@@ -1726,16 +1732,24 @@ function workloadHTML(u){
   return `<div class="workbar" style="display:flex">${segs}</div><div class="worktext">${text}</div>`;
 }
 
+/* El panel vive en un contenedor PERSISTENTE (fuera de #view): se carga UNA sola vez
+   y queda vivo. Entrar/salir del panel solo lo muestra/oculta → instantáneo, sin recargar. */
+let PANEL_HOST = null;
 function renderPanel(){
-  $('#view').innerHTML = `
-  <div class="panelbar">
-    <div class="wordmark mini" role="button" tabindex="0" title="Volver al inicio"
-      onclick="setView({name:'canales'})" onkeydown="if(event.key==='Enter')setView({name:'canales'})">SERVIDOR <span>YOUTUBE</span></div>
-    <h1>Panel de canales</h1>
-  </div>
-  <div class="panelframe">
-    <iframe src="/panel" title="Panel de canales"></iframe>
-  </div>`;
+  $('#view').innerHTML = '';
+  if(!PANEL_HOST){
+    PANEL_HOST = document.createElement('div');
+    PANEL_HOST.className = 'panelhost';
+    PANEL_HOST.innerHTML = `
+      <div class="panelbar">
+        <div class="wordmark mini" role="button" tabindex="0" title="Volver al inicio"
+          onclick="setView({name:'canales'})" onkeydown="if(event.key==='Enter')setView({name:'canales'})">SERVIDOR <span>YOUTUBE</span></div>
+        <h1>Panel de canales</h1>
+      </div>
+      <div class="panelframe"><iframe src="/panel" title="Panel de canales"></iframe></div>`;
+    document.body.appendChild(PANEL_HOST);
+  }
+  PANEL_HOST.style.display = 'flex';
 }
 
 function renderEquipo(){
