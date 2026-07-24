@@ -893,6 +893,14 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
   background:#060607; height:calc(100vh - 96px); min-height:520px}
 .panelframe iframe{width:100%; height:100%; border:0; display:block}
 @media (max-width:700px){ .panelframe{height:calc(100vh - 120px); border-radius:12px} .panelbar{margin-bottom:10px} }
+/* Panel de canales a PANTALLA COMPLETA: oculta el menú del servidor (un solo sidebar) */
+body.panelfull .side{display:none}
+body.panelfull .navback{display:none}
+body.panelfull .shell{grid-template-columns:1fr}
+body.panelfull .main{max-width:none; margin:0; padding:16px 20px 0}
+body.panelfull .fab-refresh{display:none}
+body.panelfull .panelframe{height:calc(100vh - 66px); border:0; border-radius:0}
+@media (max-width:700px){ body.panelfull .main{padding:12px 12px 0} body.panelfull .panelframe{height:calc(100vh - 56px)} }
 .member .panelgrant{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12.5px}
 .member .panelgrant .switch{cursor:pointer; user-select:none}
 </style>
@@ -1098,6 +1106,8 @@ async function refreshApp(){
 
 function paintView(){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('on'));
+  // el Panel de canales ocupa toda la pantalla (oculta el menú del servidor)
+  document.body.classList.toggle('panelfull', VIEW.name==='panel');
   if(VIEW.name==='equipo'){ $('#nav-equipo')?.classList.add('on'); renderEquipo(); }
   else if(VIEW.name==='ajustes'){ $('#nav-ajustes')?.classList.add('on'); renderAjustes(); }
   else if(VIEW.name==='buscar'){ $('#nav-buscar')?.classList.add('on'); renderBuscar(); }
