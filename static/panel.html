@@ -159,6 +159,12 @@ body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:2
 .kw-row { display: grid; grid-template-columns: 150px 1fr 88px; align-items: center; gap: 14px;
   padding: 7px 10px; border-radius: 12px; transition: background .15s; }
 .kw-row:hover { background: rgba(255,255,255,.035); }
+/* barra-tema desplegable: la barra misma abre las peticiones ahí mismo */
+.kw-topic > summary.kw-row { cursor: pointer; list-style: none; }
+.kw-topic > summary::-webkit-details-marker { display: none; }
+.kw-topic[open] > summary.kw-row { background: rgba(255,255,255,.05); }
+.kw-topic > summary .kw-word::after { content: "▸"; color: #FF8A3D; margin-left: 6px; font-size: 11px; transition: transform .15s; display: inline-block; }
+.kw-topic[open] > summary .kw-word::after { transform: rotate(90deg); }
 .kw-word { font: 700 13.5px/1.25 'Space Grotesk', sans-serif; color: #F6F3F1; letter-spacing: .005em;
   display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .kw-bar-track { position: relative; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.05);
@@ -513,6 +519,18 @@ body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:2
   .topbar h1{ font-size:20px; }
   .topbar .who img{ width:44px; height:44px; }
   .topbar .sub{ font-size:12px; }
+  /* filas "qué videos trajeron las vistas": la mini-gráfica apretaba el título → fuera en móvil */
+  .tr-item svg{ display:none; }
+  .tr-item img{ width:66px; }
+  .tr-title{ font-size:13px; }
+  .tr-gain{ font-size:14px; }
+  /* tarjetas y cajas con menos aire desperdiciado */
+  .chart-box{ padding:14px 13px; }
+  .chart-box h2{ font-size:16px; }
+  .scard, .stat-cards, .pulse-grid{ gap:10px; }
+  /* competencia: una columna cómoda */
+  .comp-grid{ grid-template-columns:1fr; }
+  .comp-videos{ grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); }
 }
 </style>
 </head>
@@ -2038,17 +2056,18 @@ function commentsHTML() {
 
   <div class="chart-box">
     <h2>🧘 Qué meditaciones te están pidiendo <span class="hint">— peticiones agrupadas por tema, ordenadas por demanda</span></h2>
+    <div class="hint" style="margin:-4px 0 10px">Toca un tema para ver ahí mismo lo que pide tu audiencia 👇</div>
     ${tr && tr.topics.length ? `<div class="kw-list">
-      ${tr.topics.map(tp => { const mx = tr.topics[0].n; return `<div class="kw-row">
+      ${tr.topics.map(tp => { const mx = tr.topics[0].n; return `<details class="kw-topic"><summary class="kw-row">
         <span class="kw-word" style="width:auto">${tp.label}</span>
         <div class="kw-bar-track"><div class="kw-bar" style="width:${(tp.n/mx)*100}%"></div></div>
-        <span class="kw-val">${tp.n} <em>peticiones</em></span></div>`; }).join("")}
-    </div>
-    <div style="margin-top:14px; display:flex; flex-direction:column; gap:8px">
-      ${tr.topics.map(tp => `<details><summary style="cursor:pointer; color:#FFB24C; font-weight:600; font-size:13.5px">${tp.label} — ver ${Math.min(tp.n, 12)} de ${tp.n} peticiones</summary>
-        <div class="cmt-list" style="margin-top:10px">${tp.examples.map(c => cmtCard(c)).join("")}</div></details>`).join("")}
-      ${tr.otros.length ? `<details><summary style="cursor:pointer; color:#FF8A3D; font-weight:600; font-size:13.5px">🗂 Otras peticiones (sin tema claro) — ${tr.otros.length}</summary>
-        <div class="cmt-list" style="margin-top:10px">${tr.otros.map(c => cmtCard(c)).join("")}</div></details>` : ""}
+        <span class="kw-val">${tp.n} <em>peticiones</em></span></summary>
+        <div class="cmt-list" style="margin:10px 0 4px">${tp.examples.map(c => cmtCard(c)).join("")}</div></details>`; }).join("")}
+      ${tr.otros.length ? `<details class="kw-topic"><summary class="kw-row">
+        <span class="kw-word" style="width:auto">🗂 Otras (sin tema claro)</span>
+        <div class="kw-bar-track"><div class="kw-bar" style="width:${(tr.otros.length/tr.topics[0].n)*100}%; opacity:.55"></div></div>
+        <span class="kw-val">${tr.otros.length} <em>peticiones</em></span></summary>
+        <div class="cmt-list" style="margin:10px 0 4px">${tr.otros.map(c => cmtCard(c)).join("")}</div></details>` : ""}
     </div>` : `<div class="hint">Aún no se detectan peticiones — se llenará al descargar más comentarios.</div>`}
   </div>
 
@@ -2330,7 +2349,6 @@ function compHTML() {
   </div>
   ${cq ? `<div class="hint" style="margin:0 0 14px">🌐 Detecta equivalencias español ↔ inglés — «money» encuentra «dinero», «dormir» encuentra «sleep». <strong>${matchCount}</strong> videos coinciden con «${esc(cq)}».</div>` : ""}
   <div class="comp-grid">
-    ${mine ? card(mine, true) : ""}
     ${S.competitors.map(input => S.compData[input] ? card(S.compData[input], false)
       : `<div class="comp-card"><div class="comp-top"><div class="comp-head"><div class="comp-name">${esc(input)}</div><div class="hint">${S.compLoading ? "Cargando datos…" : "Pendiente — dale a ⟳ Actualizar datos"}</div></div><button class="comp-del" data-input="${esc(input)}">✕ Quitar</button></div></div>`).join("")}
     ${!S.competitors.length ? `<div class="no-data"><strong>Todavía no sigues a ningún competidor.</strong><br>Agrega los @handles de 3–5 canales de tu nicho. Saber qué les funciona a ellos —qué video se les disparó, cada cuánto publican, si te están alcanzando— vale más que cualquier corazonada.</div>` : ""}
@@ -2580,19 +2598,8 @@ function modalHTML() {
           <div class="zone-actions"><button class="btn ghost" id="btn-doc-open">Abrir guion ↗</button></div>
         </div>
         <input class="inp" id="doc-url" placeholder="https://docs.google.com/document/d/…" value="${esc(docUrl)}">
-        <div class="hint" style="margin-top:6px">Se guarda en la data y en tus respaldos (solo el link). Dale a <strong>Guardar todo</strong> abajo.</div>
-      </div>
-
-      <div class="zone">
-        <div class="zone-head">
-          <h3>📜 Guion del video</h3>
-          <div class="zone-actions">
-            <button class="btn ghost" id="btn-copy">Copiar</button>
-            <button class="btn gold" id="btn-save">Guardar todo</button>
-          </div>
-        </div>
-        <textarea class="script-area" id="script-area" placeholder="Pega o escribe aquí el guion de este video. Se guarda en la base de datos local (IndexedDB) y en tus respaldos.">${esc(script)}</textarea>
-        <div class="hint" id="script-hint">${script ? script.trim().split(/\s+/).filter(Boolean).length + " palabras" : "Sin guion todavía"}</div>
+        <div class="hint" style="margin-top:6px">El guion vive en tu Google Docs — aquí solo guardas el link (entra en tus respaldos).</div>
+        <div style="display:flex; justify-content:flex-end; margin-top:12px"><button class="btn gold" id="btn-save">Guardar todo</button></div>
       </div>
     </div>
   </div>`;
@@ -2778,7 +2785,9 @@ function bindMain() {
   $("btn-desc-copy")?.addEventListener("click", () => { navigator.clipboard?.writeText($("desc-text")?.textContent || ""); toast("Descripción copiada ✓"); });
   $("btn-save")?.addEventListener("click", async () => {
     const id = S.selectedId;
-    const text = $("script-area").value, tags = $("tags-inp").value.trim();
+    // el textarea de guion se quitó (el guion vive en el Doc); conserva lo ya guardado
+    const text = $("script-area") ? $("script-area").value : (S.scripts[id] || "");
+    const tags = $("tags-inp").value.trim();
     const docUrl = ($("doc-url")?.value || "").trim();
     try {
       await idb.set("script:" + id, { text, updated: new Date().toISOString() });
