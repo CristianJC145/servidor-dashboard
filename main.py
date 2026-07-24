@@ -155,6 +155,11 @@ def init_db():
             size INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
         );
+        -- almacén clave/valor del Panel de Canal (estadísticas de YouTube)
+        CREATE TABLE IF NOT EXISTS panel_kv (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
         """
     )
     # migración: estados antiguos (4) → nuevos (3)
@@ -178,6 +183,7 @@ def init_db():
         ("users", "telegram_chat_id", "ALTER TABLE users ADD COLUMN telegram_chat_id TEXT DEFAULT ''"),
         ("users", "telegram_code", "ALTER TABLE users ADD COLUMN telegram_code TEXT DEFAULT ''"),
         ("users", "email", "ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''"),
+        ("users", "panel_access", "ALTER TABLE users ADD COLUMN panel_access INTEGER DEFAULT 0"),
         ("calendar_events", "done", "ALTER TABLE calendar_events ADD COLUMN done INTEGER DEFAULT 0"),
     ]:
         cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -234,13 +240,25 @@ def verify_password(password: str, stored: str) -> bool:
     return secrets.compare_digest(h.hex(), expected)
 
 
+def _row_get(row, key, default=None):
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return default
+
+
 def user_public(row) -> dict:
+    role = row["role"]
+    panel_access = bool(_row_get(row, "panel_access", 0))
     return {
         "id": row["id"],
         "username": row["username"],
         "display_name": row["display_name"],
-        "role": row["role"],
+        "role": role,
         "active": bool(row["active"]),
+        # el admin siempre puede; a los editores se les concede uno por uno
+        "panel_access": panel_access,
+        "can_panel": role == "admin" or panel_access,
     }
 
 
@@ -263,6 +281,13 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user["role"] != "admin":
         raise HTTPException(403, "Solo un administrador puede hacer esto.")
+    return user
+
+
+def require_panel(user: dict = Depends(get_current_user)) -> dict:
+    """Acceso al Panel de Canal: el admin siempre; un editor solo si se le concedió."""
+    if user["role"] != "admin" and not _row_get(user, "panel_access", 0):
+        raise HTTPException(403, "No tienes acceso al Panel de Canal.")
     return user
 
 
@@ -292,6 +317,7 @@ class UserPatch(BaseModel):
     role: Optional[str] = None
     active: Optional[bool] = None
     password: Optional[str] = None
+    panel_access: Optional[bool] = None
 
 
 class TaskCreate(BaseModel):
@@ -441,6 +467,8 @@ def patch_user(user_id: int, body: UserPatch, admin: dict = Depends(require_admi
         updates.append("role = ?"); params.append(body.role)
     if body.active is not None:
         updates.append("active = ?"); params.append(1 if body.active else 0)
+    if body.panel_access is not None:
+        updates.append("panel_access = ?"); params.append(1 if body.panel_access else 0)
     if body.password is not None:
         if len(body.password) < 6:
             conn.close()
@@ -2110,6 +2138,65 @@ async def restore_backup(file: UploadFile = File(...), admin: dict = Depends(req
             for name in os.listdir(up):
                 shutil.copy2(os.path.join(up, name), os.path.join(UPLOADS_DIR, name))
     return {"ok": True, "note": "Restaurado. Inicia sesión de nuevo."}
+
+
+# ---------------------------------------------------------------- Panel de Canal
+# Estadísticas de YouTube integradas. Almacén clave/valor propio (tabla panel_kv),
+# protegido con el login del dashboard: admin siempre, editores con permiso concedido.
+# La YouTube API key NUNCA llega aquí: el front la marca LOCAL_ONLY (se queda en el navegador).
+
+_JSON = "application/json"
+
+
+@app.get("/panel/api/kv")
+def panel_list_keys(prefix: str = "", user: dict = Depends(require_panel)):
+    conn = db()
+    rows = conn.execute(
+        "SELECT key FROM panel_kv WHERE key LIKE ? ORDER BY key", (prefix + "%",)
+    ).fetchall()
+    conn.close()
+    return [r["key"] for r in rows]
+
+
+@app.get("/panel/api/kv/{key:path}")
+def panel_get_key(key: str, user: dict = Depends(require_panel)):
+    conn = db()
+    row = conn.execute("SELECT value FROM panel_kv WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    if row is None:
+        return Response("null", media_type=_JSON)
+    return Response(row["value"], media_type=_JSON)
+
+
+@app.put("/panel/api/kv/{key:path}")
+async def panel_set_key(key: str, request: Request, user: dict = Depends(require_panel)):
+    body = await request.body()
+    text = body.decode("utf-8") if body else "null"
+    conn = db()
+    conn.execute(
+        "INSERT INTO panel_kv(key, value) VALUES(?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, text),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@app.delete("/panel/api/kv/{key:path}")
+def panel_del_key(key: str, user: dict = Depends(require_panel)):
+    conn = db()
+    conn.execute("DELETE FROM panel_kv WHERE key = ?", (key,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@app.get("/panel")
+def panel_index():
+    # Solo la cáscara HTML (sin datos). El JS lee el token del login (mismo origen)
+    # y lo manda en cada llamada a /panel/api/kv, que sí exige permiso.
+    return FileResponse("static/panel.html")
 
 
 # ---------------------------------------------------------------- frontend

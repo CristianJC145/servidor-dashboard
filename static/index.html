@@ -857,6 +857,13 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
   .task,.modal,.chcard,.member{animation:up .2s ease}
   @keyframes up{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 }
+/* Panel de Canal embebido */
+.panelframe{border:1px solid var(--line,#26262b); border-radius:16px; overflow:hidden;
+  background:#060607; height:calc(100vh - 150px); min-height:520px; box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.panelframe iframe{width:100%; height:100%; border:0; display:block}
+@media (max-width:700px){ .panelframe{height:calc(100vh - 170px); border-radius:12px} }
+.member .panelgrant{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12.5px}
+.member .panelgrant .switch{cursor:pointer; user-select:none}
 </style>
 </head>
 <body>
@@ -893,6 +900,7 @@ const ICONS = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5c0-3.3-2.7-6-6-6s-6 2.7-6 6c0 6-2.5 7-2.5 7h17S18 14.5 18 8.5"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>',
+  panel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20.5h18"/><rect x="4.5" y="11" width="3.5" height="7" rx="1"/><rect x="10.2" y="6.5" width="3.5" height="11.5" rx="1"/><rect x="15.9" y="9" width="3.5" height="9" rx="1"/></svg>',
 };
 
 async function api(path, opts = {}) {
@@ -1014,6 +1022,7 @@ function renderApp(){
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
       <button class="nav-item" id="nav-buscar" onclick="setView({name:'buscar'})">${ICONS.buscar}<span>Buscar</span></button>
       <button class="nav-item" id="nav-calendario" onclick="setView({name:'calendario'})">${ICONS.cal}<span>Calendario</span></button>
+      ${ME.can_panel?`<button class="nav-item" id="nav-panel" onclick="setView({name:'panel'})">${ICONS.panel}<span>Panel de Canal</span></button>`:''}
       <button class="nav-item" id="nav-notif" onclick="openNotif()">${ICONS.bell}<span>Notificaciones</span></button>
       ${isAdmin?`<button class="nav-item" id="nav-equipo" onclick="setView({name:'equipo'})">${ICONS.equipo}<span>Equipo</span></button>`:''}
       ${isAdmin?`<button class="nav-item" id="nav-ajustes" onclick="setView({name:'ajustes'})">${ICONS.ajustes}<span>Ajustes</span>
@@ -1053,6 +1062,7 @@ function paintView(){
   else if(VIEW.name==='ajustes'){ $('#nav-ajustes')?.classList.add('on'); renderAjustes(); }
   else if(VIEW.name==='buscar'){ $('#nav-buscar')?.classList.add('on'); renderBuscar(); }
   else if(VIEW.name==='calendario'){ $('#nav-calendario')?.classList.add('on'); renderCalendario(); }
+  else if(VIEW.name==='panel'){ $('#nav-panel')?.classList.add('on'); renderPanel(); }
   else { $('#nav-canales')?.classList.add('on'); VIEW.name==='canal' ? renderCanal() : renderCanales(); }
 }
 
@@ -1659,6 +1669,18 @@ function workloadHTML(u){
   return `<div class="workbar" style="display:flex">${segs}</div><div class="worktext">${text}</div>`;
 }
 
+function renderPanel(){
+  $('#view').innerHTML = `
+  <div class="pagehead">
+    <div><h1>Panel de Canal</h1>
+    <div class="sub">Estadísticas de tus canales de YouTube — miniaturas, comentarios, competencia</div></div>
+    <div class="actions"><a class="btn ghost" href="/panel" target="_blank" rel="noopener">Abrir en pantalla completa ↗</a></div>
+  </div>
+  <div class="panelframe">
+    <iframe src="/panel" title="Panel de Canal" loading="lazy"></iframe>
+  </div>`;
+}
+
 function renderEquipo(){
   const activos = USERS.filter(u=>u.active).length;
   $('#view').innerHTML = `
@@ -1680,6 +1702,14 @@ function renderEquipo(){
         </select>`:`<span class="rolechip ${u.role}">${u.role}</span>`}
       </div>
       ${workloadHTML(u)}
+      <div class="panelgrant">
+        ${u.role==='admin'
+          ? `<span title="Los administradores siempre ven el Panel">📊 Panel de Canal: <b>siempre (admin)</b></span>`
+          : `<label class="switch" title="Dar acceso al Panel de Canal">
+               <input type="checkbox" ${u.panel_access?'checked':''} onchange="togglePanel(${u.id}, this.checked)">
+               📊 Acceso al Panel de Canal
+             </label>`}
+      </div>
       <div class="acts">
       ${u.id!==ME.id?`
         <button class="btn ghost sm" onclick="toggleUser(${u.id},${u.active?'false':'true'})">${u.active?'Desactivar':'Activar'}</button>
@@ -1695,6 +1725,14 @@ async function changeRole(id, role){
     await api('/users/'+id,{method:'PATCH',body:JSON.stringify({role})});
     await refresh(); renderEquipo();
     toast(`Rol cambiado a ${role} ✦`);
+  }catch(e){ toast(e.message); renderEquipo(); }
+}
+
+async function togglePanel(id, granted){
+  try{
+    await api('/users/'+id,{method:'PATCH',body:JSON.stringify({panel_access:granted})});
+    await refresh(); renderEquipo();
+    toast(granted?'Acceso al Panel concedido ✦':'Acceso al Panel retirado');
   }catch(e){ toast(e.message); renderEquipo(); }
 }
 
