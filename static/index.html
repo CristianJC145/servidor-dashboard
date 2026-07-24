@@ -857,11 +857,13 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
   .task,.modal,.chcard,.member{animation:up .2s ease}
   @keyframes up{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 }
-/* Panel de Canal embebido */
+/* Panel de canales embebido — como un módulo más, a pantalla completa */
+.panelbar{display:flex; align-items:center; gap:16px; margin-bottom:14px; flex-wrap:wrap}
+.panelbar h1{margin:0; font-size:clamp(20px,3vw,30px)}
 .panelframe{border:1px solid var(--line,#26262b); border-radius:16px; overflow:hidden;
-  background:#060607; height:calc(100vh - 150px); min-height:520px; box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  background:#060607; height:calc(100vh - 96px); min-height:520px; box-shadow:0 10px 40px rgba(0,0,0,.35)}
 .panelframe iframe{width:100%; height:100%; border:0; display:block}
-@media (max-width:700px){ .panelframe{height:calc(100vh - 170px); border-radius:12px} }
+@media (max-width:700px){ .panelframe{height:calc(100vh - 120px); border-radius:12px} .panelbar{margin-bottom:10px} }
 .member .panelgrant{display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12.5px}
 .member .panelgrant .switch{cursor:pointer; user-select:none}
 </style>
@@ -1671,13 +1673,12 @@ function workloadHTML(u){
 
 function renderPanel(){
   $('#view').innerHTML = `
-  <div class="pagehead">
-    <div><h1>Panel de canales</h1>
-    <div class="sub">Estadísticas de tus canales de YouTube — miniaturas, comentarios, competencia</div></div>
-    <div class="actions"><a class="btn ghost" href="/panel" target="_blank" rel="noopener">Abrir en pantalla completa ↗</a></div>
+  <div class="panelbar">
+    <button class="backlink" onclick="setView({name:'canales'})">← Volver al inicio</button>
+    <h1>Panel de canales</h1>
   </div>
   <div class="panelframe">
-    <iframe src="/panel" title="Panel de Canal" loading="lazy"></iframe>
+    <iframe src="/panel" title="Panel de canales"></iframe>
   </div>`;
 }
 
