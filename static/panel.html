@@ -1497,9 +1497,33 @@ async function guionesScan(){
     const r = await pfetch("/api/guiones/scan?channel=" + encodeURIComponent(S.activeInput||""), { method:"POST" });
     const d = await r.json();
     if(!r.ok){ toast(d.detail || "No se pudo buscar (¿Drive con permiso de lectura?)"); }
-    else { toast("📜 " + d.resumen); if(d.match && d.match.length){ await fullReloadKV(); render(); } }
+    else {
+      toast("📜 " + d.resumen);
+      if(d.match && d.match.length){ await fullReloadKV(); render(); }
+      // no enlazó nada → muestra el diagnóstico para entender por qué
+      else if((d.revisados||0) > 0){ await guionesDebug(true); }
+    }
   }catch(e){ toast("Error: " + e.message); }
   b.disabled = false; b.textContent = prev; loadGuionesStatus();
+}
+async function guionesDebug(auto){
+  try{
+    const r = await pfetch("/api/guiones/debug");
+    const d = await r.json();
+    const msg =
+      "🔧 DIAGNÓSTICO DE GUIONES\n\n" +
+      "¿Tiene permiso de LECTURA?: " + (d.tiene_lectura ? "SÍ ✓" : "NO ✗ (hay que reconectar Google y aceptar el permiso)") + "\n" +
+      "Google Docs que el servidor VE: " + (d.docs_que_ve ?? "?") + "\n" +
+      (d.docs_nombres && d.docs_nombres.length ? "Ejemplos: " + d.docs_nombres.slice(0,6).join(" · ") + "\n" : "") +
+      (d.docs_error ? "Error al listar: " + JSON.stringify(d.docs_error).slice(0,200) + "\n" : "") +
+      "\nProbó el video: " + (d.titulo_probado || "(ninguno)") + "\n" +
+      "Frase de búsqueda: " + (d.frase_busqueda || "") + "\n" +
+      "Docs que encontró: " + ((d.resultados_busqueda||[]).length) +
+      ((d.resultados_busqueda||[]).length ? " → " + d.resultados_busqueda.slice(0,5).join(" · ") : "") + "\n" +
+      (d.primera_linea_1er_resultado != null ? "1ª línea del 1º: «" + d.primera_linea_1er_resultado + "»\n" : "") +
+      (d.error ? "\nERROR: " + d.error : "");
+    alert(msg);
+  }catch(e){ if(!auto) toast("No se pudo diagnosticar: " + e.message); }
 }
 async function guionesBackup(){
   const b = document.getElementById("btn-guiones-backup"); if(!b) return;

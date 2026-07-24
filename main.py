@@ -2424,6 +2424,54 @@ def guiones_status(user: dict = Depends(require_panel)):
     return {"channels": out}
 
 
+@app.get("/panel/api/guiones/debug")
+def guiones_debug(title: str = "", admin: dict = Depends(require_admin)):
+    """Diagnóstico: qué permisos tiene el token, si la API ve tus Docs, y si la búsqueda encuentra
+    un título dado. Sirve para entender por qué 'Buscar los que faltan' no encuentra nada."""
+    conn = db()
+    out = {}
+    try:
+        token = drive_access_token(conn)
+    except HTTPException as e:
+        conn.close()
+        return {"error": e.detail}
+    # 1) permisos reales del token
+    st, _, ti = _http_json(
+        "GET", "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=" + urllib.parse.quote(token), {})
+    scopes = ti.get("scope", "") if st == 200 else f"tokeninfo {st}"
+    out["tiene_lectura"] = "drive.readonly" in scopes
+    out["scopes"] = scopes
+    # 2) ¿ve algún Google Doc?
+    q = "mimeType='application/vnd.google-apps.document' and trashed=false"
+    url = f"{DRIVE_API}/files?q={urllib.parse.quote(q)}&fields=files(id,name)&pageSize=25&spaces=drive"
+    st, _, body = _http_json("GET", url, {"Authorization": "Bearer " + token})
+    docs = body.get("files", []) if st == 200 else []
+    out["docs_que_ve"] = len(docs)
+    out["docs_nombres"] = [d["name"] for d in docs[:15]]
+    if st != 200:
+        out["docs_error"] = body
+    # 3) búsqueda del título dado (o del primer video sin guion)
+    if not title:
+        for c in panel_channels(conn):
+            for v in panel_channel_videos(conn, c.get("id") or c.get("input")):
+                if not _panel_kv_get(conn, f"doc:{v['id']}"):
+                    title = v["title"]
+                    break
+            if title:
+                break
+    if title:
+        frase = _title_phrase(title)
+        cands = drive_search_docs(token, frase)
+        out["titulo_probado"] = title
+        out["frase_busqueda"] = frase
+        out["resultados_busqueda"] = [c["name"] for c in cands]
+        if cands:
+            first, _ = drive_doc_text(token, cands[0]["id"])
+            out["primera_linea_1er_resultado"] = first
+    conn.close()
+    return out
+
+
 def _guiones_scan_run(conn, token, channel="", limit=40):
     """Enlaza los guiones que faltan (1ª línea == título). Devuelve el reporte."""
     chans = panel_channels(conn)
