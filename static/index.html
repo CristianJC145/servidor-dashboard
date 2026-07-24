@@ -2214,6 +2214,7 @@ function renderAjustes(){
               : a.connected
                 ? `<button class="btn ghost sm" onclick="driveActivate(${a.id})">Usar este</button>`
                 : `<button class="btn ghost sm" onclick="driveConnect()">Reconectar</button>`}
+            ${a.connected?`<button class="btn ghost sm" onclick="driveConnect()" title="Volver a autorizar con la MISMA cuenta de Google (para tomar permisos nuevos, ej. leer tus Docs)">🔄 Reautorizar</button>`:''}
             <button type="button" class="srvdel" title="Quitar servidor" onclick="driveRemove(${a.id}, '${esc(a.name).replace(/'/g,"\\'")}')">✕</button>
           </div>`).join('')}
       </div>
