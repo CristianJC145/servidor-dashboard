@@ -244,8 +244,19 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 }
 .chcard:hover::after{opacity:1}
 .chcard > *{position:relative; z-index:1}
-.chcard .chname{font-family:'Unbounded'; font-size:18px; font-weight:600; line-height:1.35; padding-right:30px}
-.chcard .chtotal{font-family:'Space Mono',monospace; font-size:11.5px; color:var(--dim); letter-spacing:.16em; text-transform:uppercase; margin-top:6px}
+.chcard .chname{font-family:'Unbounded'; font-size:17px; font-weight:600; line-height:1.3}
+.chcard .chtotal{font-family:'Space Mono',monospace; font-size:11.5px; color:var(--dim); letter-spacing:.16em; text-transform:uppercase; margin-top:5px}
+/* foto del canal (izquierda) + nombre (derecha), estilo YouTube */
+.chhead{display:flex; align-items:center; gap:13px; padding-right:26px; margin-bottom:2px}
+.chavatar{width:54px; height:54px; border-radius:50%; flex:none; overflow:hidden; position:relative;
+  background:var(--panel-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center}
+.chavatar img{width:100%; height:100%; object-fit:cover; display:block}
+.chavatar .chini{font-family:'Unbounded'; font-size:21px; font-weight:600; color:var(--muted)}
+.chavatar.editable{cursor:pointer}
+.chavatar .chcam{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.55); font-size:17px; opacity:0; transition:opacity .15s}
+.chavatar.editable:hover .chcam{opacity:1}
+.chhead-txt{min-width:0; flex:1}
 .chcard .charrow{
   position:absolute; top:20px; right:18px; color:var(--dim); font-size:17px; transition:color .15s, transform .15s;
 }
@@ -1237,8 +1248,16 @@ function renderCanales(){
       <div class="chcard" role="button" tabindex="0"
            onclick="openCanal('${esc(c.name).replace(/'/g,"\\'")}')"
            onkeydown="if(event.key==='Enter')openCanal('${esc(c.name).replace(/'/g,"\\'")}')">
-        <div class="chname">${esc(c.name)}</div>
-        <div class="chtotal">${c.pendiente+c.revision+c.terminado} tareas</div>
+        <div class="chhead">
+          <div class="chavatar ${isAdmin?'editable':''}" ${isAdmin?`onclick="event.stopPropagation(); pickChannelLogo(${c.id})" title="Cambiar foto del canal"`:''}>
+            ${c.logo?`<img src="${esc(c.logo)}" alt="">`:`<span class="chini">${esc((c.name||'?').trim()[0]?.toUpperCase()||'?')}</span>`}
+            ${isAdmin?`<span class="chcam">📷</span>`:''}
+          </div>
+          <div class="chhead-txt">
+            <div class="chname">${esc(c.name)}</div>
+            <div class="chtotal">${c.pendiente+c.revision+c.terminado} tareas</div>
+          </div>
+        </div>
         <span class="charrow">→</span>
         ${isAdmin?`<button type="button" class="chdel" title="Eliminar canal"
           onclick="event.stopPropagation(); deleteChannel(${c.id}, '${esc(c.name).replace(/'/g,"\\'")}', ${c.pendiente+c.revision+c.terminado})">✕</button>`:''}
@@ -1261,6 +1280,22 @@ function renderCanales(){
   ${!CHANNELS.length && !sinCanal.length && !isAdmin ? `<div class="empty" style="margin-top:18px">Aún no hay canales. El administrador los crea.</div>`:''}
   `;
   loadStorage();
+}
+
+function pickChannelLogo(id){
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp,image/gif';
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    if(!f) return;
+    try{
+      const fd = new FormData(); fd.append('file', f);
+      await apiUpload('/channels/'+id+'/logo', fd);
+      await refresh(); renderCanales();
+      toast('Foto del canal actualizada ✦');
+    }catch(e){ toast(e.message); }
+  };
+  inp.click();
 }
 
 function openCanal(name){ setView({name:'canal', channel:name, st:'pendiente'}); }

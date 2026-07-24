@@ -176,6 +176,7 @@ def init_db():
     # migración: columnas nuevas en tablas que ya existían de versiones previas
     for table, col, ddl in [
         ("channels", "drive_folder_id", "ALTER TABLE channels ADD COLUMN drive_folder_id TEXT DEFAULT ''"),
+        ("channels", "logo", "ALTER TABLE channels ADD COLUMN logo TEXT DEFAULT ''"),
         ("tasks", "drive_folder_id", "ALTER TABLE tasks ADD COLUMN drive_folder_id TEXT DEFAULT ''"),
         ("task_files", "storage", "ALTER TABLE task_files ADD COLUMN storage TEXT DEFAULT 'server'"),
         ("task_files", "drive_file_id", "ALTER TABLE task_files ADD COLUMN drive_file_id TEXT DEFAULT ''"),
@@ -856,6 +857,64 @@ def create_channel(body: ChannelCreate, admin: dict = Depends(require_admin)):
     out = dict(row)
     out["drive_folder_id"] = drive_folder or out.get("drive_folder_id", "")
     return out
+
+
+@app.post("/api/channels/{channel_id}/logo")
+async def upload_channel_logo(channel_id: int, file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    conn = db()
+    row = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Ese canal no existe.")
+    original = os.path.basename(file.filename or "logo")
+    ext = os.path.splitext(original)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+        conn.close()
+        raise HTTPException(400, "Sube una imagen (PNG, JPG, WEBP o GIF).")
+    stored = f"logo_ch{channel_id}_{secrets.token_hex(4)}{ext}"
+    dest = os.path.join(UPLOADS_DIR, stored)
+    size = 0
+    try:
+        with open(dest, "wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > 8 * 1024 * 1024:
+                    raise HTTPException(400, "La imagen es muy grande (máximo 8 MB).")
+                out.write(chunk)
+    except HTTPException:
+        if os.path.exists(dest):
+            os.remove(dest)
+        conn.close()
+        raise
+    old = (dict(row).get("logo") or "")
+    conn.execute("UPDATE channels SET logo = ? WHERE id = ?", ("/uploads/" + stored, channel_id))
+    conn.commit()
+    conn.close()
+    if old.startswith("/uploads/"):  # limpia el logo anterior
+        try:
+            os.remove(os.path.join(UPLOADS_DIR, os.path.basename(old)))
+        except OSError:
+            pass
+    return {"ok": True, "logo": "/uploads/" + stored}
+
+
+@app.delete("/api/channels/{channel_id}/logo")
+def delete_channel_logo(channel_id: int, admin: dict = Depends(require_admin)):
+    conn = db()
+    row = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Ese canal no existe.")
+    old = (dict(row).get("logo") or "")
+    conn.execute("UPDATE channels SET logo = '' WHERE id = ?", (channel_id,))
+    conn.commit()
+    conn.close()
+    if old.startswith("/uploads/"):
+        try:
+            os.remove(os.path.join(UPLOADS_DIR, os.path.basename(old)))
+        except OSError:
+            pass
+    return {"ok": True}
 
 
 @app.delete("/api/channels/{channel_id}")
