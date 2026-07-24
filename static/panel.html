@@ -224,6 +224,21 @@ body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:2
   color: #F6F3F1; padding: 14px; font: 400 14px/1.6 'Inter', sans-serif; resize: vertical; }
 .tags-inp { width: 100%; }
 .zone .hint { margin-top: 6px; }
+/* zonas del detalle de video — look limpio (tarjeta + ícono en chip) */
+.vzone { margin-top: 14px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px; padding: 14px 15px; }
+.vzone-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+.vzone-title, .vzone-sum { display: flex; align-items: center; gap: 10px; font: 700 14.5px 'Space Grotesk', sans-serif; color: #F6F3F1; }
+.vzone-sum { cursor: pointer; list-style: none; }
+.vzone-sum::-webkit-details-marker { display: none; }
+.vzone-ic { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border-radius: 9px; background: rgba(255,106,31,.14); border: 1px solid rgba(255,106,31,.22); font-size: 14px; flex: none; }
+.vzone-body { margin-top: 12px; }
+.vzone .inp { width: 100%; }
+.vzone-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 11px; flex-wrap: wrap; }
+.vzone-foot .hint { margin: 0; }
+.desc-scroll { background: #0c0c0e; border: 1px solid #26262b; border-radius: 10px; padding: 13px; font-size: 13px;
+  line-height: 1.6; white-space: pre-wrap; max-height: 300px; overflow-y: auto; color: #c9c4bf; }
 
 /* setup */
 .setup { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 30px 16px; }
@@ -487,37 +502,36 @@ body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:2
 .topbar .acts{ display:flex; gap:9px; align-items:center; flex-wrap:wrap; }
 .btn.sm{ padding:8px 12px; font-size:12.5px; }
 
+.pburger{ display:none; }
+.pnav-back{ display:none; }
 @media (max-width:860px){
   .shell{ grid-template-columns:1fr; }
+  /* menú del panel = cajón hamburguesa deslizable (como el servidor) */
+  .pburger{
+    display:inline-flex; align-items:center; justify-content:center; width:42px; height:42px; flex:none;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:11px;
+    color:#F6F3F1; font-size:19px; cursor:pointer;
+  }
   .side{
-    position:sticky; top:0; height:auto; flex-direction:column; gap:8px; z-index:6;
-    min-width:0; max-width:100%; overflow:hidden;
-    padding:10px 12px 8px; border-right:none; border-bottom:1px solid rgba(255,255,255,.07);
+    position:fixed; top:0; left:0; height:100dvh; width:84%; max-width:320px; z-index:40;
+    transform:translateX(-105%); transition:transform .28s cubic-bezier(.22,1,.36,1);
+    border-right:1px solid rgba(255,255,255,.08); border-bottom:none; gap:10px;
+    background:rgba(14,12,11,.98); -webkit-backdrop-filter:blur(30px); backdrop-filter:blur(30px);
+    overflow-y:auto; padding:18px 14px 22px;
   }
-  .side-ch{ padding:0 0 8px; margin-bottom:0; }
-  .side-ch .sel{ padding:11px 12px; font-size:14px; }
-  .side-ch-row .btn{ padding:9px 0; }
-  /* pestañas = barra horizontal deslizable (chips), estilo YouTube */
-  .side-nav{
-    flex-direction:row; flex-wrap:nowrap; gap:7px; padding:2px 0 4px; overflow-x:auto;
-    min-width:0; max-width:100%; -webkit-overflow-scrolling:touch; scrollbar-width:none;
-  }
-  .side-nav::-webkit-scrollbar{ display:none; }
-  .navitem{
-    width:auto; flex:none; white-space:nowrap; gap:8px; padding:9px 15px;
-    border:1px solid rgba(255,255,255,.09); border-radius:99px;
-  }
-  .navitem.on{ box-shadow:none; border-color:#FF6A1F; }
-  .navitem .cnt{ display:none; }
-  /* almacenamiento y herramientas: compacto, en una fila */
-  .side-foot{ margin:0; padding:6px 0 2px; border-top:none; flex-direction:row; align-items:center; gap:8px; flex-wrap:wrap; }
-  .side-foot .storage-line{ display:none; }
-  .side-foot .toolrow{ margin-left:auto; gap:5px; }
-  .side-foot .toolrow .btn{ flex:none; width:38px; padding:8px 0; }
+  body.pnav-open .side{ transform:translateX(0); box-shadow:0 0 60px rgba(0,0,0,.6); }
+  body.pnav-open .pnav-back{ display:block; position:fixed; inset:0; z-index:35; background:rgba(0,0,0,.55);
+    -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
+  /* dentro del cajón: la nav es lista vertical (no chips) */
+  .side-nav{ flex-direction:column; gap:3px; }
+  .navitem{ width:100%; justify-content:flex-start; padding:12px 13px; border:none; border-radius:11px; }
+  .navitem.on{ box-shadow:inset 2.5px 0 0 #FF6A1F; }
+  .side-foot{ margin-top:auto; }
   .main{ padding:14px 13px 80px; }
-  .topbar{ margin-bottom:16px; gap:12px; }
-  .topbar h1{ font-size:20px; }
-  .topbar .who img{ width:44px; height:44px; }
+  .topbar{ margin-bottom:16px; gap:11px; align-items:center; }
+  .topbar h1{ font-size:19px; }
+  .topbar .who{ gap:10px; }
+  .topbar .who img{ width:40px; height:40px; }
   .topbar .sub{ font-size:12px; }
   /* filas "qué videos trajeron las vistas": la mini-gráfica apretaba el título → fuera en móvil */
   .tr-item svg{ display:none; }
@@ -1455,6 +1469,10 @@ const ICN = {
   vs:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><path d="M14.5 4H20v5.5M20 4l-7 7M9.5 20H4v-5.5M4 20l7-7M4 4l5 5M20 20l-5-5"/></svg>`,
   ideas:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><path d="M9 18h6M10 21h4M8.5 14a6 6 0 1 1 7 0c-.7.6-1 1.2-1 2h-5c0-.8-.3-1.4-1-2z"/></svg>`,
 };
+/* menú del panel en móvil = cajón hamburguesa (como el servidor) */
+function togglePNav(){ document.body.classList.toggle("pnav-open"); }
+function closePNav(){ document.body.classList.remove("pnav-open"); }
+
 function mainHTML() {
   const ch = S.channel;
   const totalDelta = Object.values(S.deltas).reduce((a,b)=>a+b,0);
@@ -1509,8 +1527,10 @@ function mainHTML() {
         </div>
       </div>
     </aside>
+    <div class="pnav-back" onclick="closePNav()"></div>
     <main class="main">
     <div class="topbar">
+      <button class="pburger" type="button" aria-label="Menú" onclick="togglePNav()">☰</button>
       <div class="who">
         ${ch?.snippet?.thumbnails?.default?.url ? `<img src="${ch.snippet.thumbnails.default.url}" alt="" onerror="this.style.display='none'">` : (activeEntry()?.avatar ? `<img src="${activeEntry().avatar}" alt="" onerror="this.style.display='none'">` : "")}
         <div>
@@ -2578,28 +2598,26 @@ function modalHTML() {
         </div>
       </div>
 
-      ${v.snippet.description ? `<div class="zone">
+      ${v.snippet.description ? `<div class="vzone">
         <details>
-          <summary style="cursor:pointer; font: 700 15px 'Space Grotesk', sans-serif; color:#F6F3F1">📄 Descripción original del video <span class="hint">— guardada automáticamente; clic para ver</span></summary>
-          <div style="display:flex; justify-content:flex-end; margin:10px 0 6px"><button class="btn ghost" id="btn-desc-copy">Copiar descripción</button></div>
-          <div style="background:#0c0c0e; border:1px solid #343439; border-radius:12px; padding:14px; font-size:13px; line-height:1.6; white-space:pre-wrap; max-height:320px; overflow-y:auto" id="desc-text">${esc(v.snippet.description)}</div>
+          <summary class="vzone-sum"><span class="vzone-ic">📝</span> Descripción del video <span class="hint" style="font-weight:400">— clic para ver</span></summary>
+          <div class="vzone-body">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:8px"><button class="btn ghost sm" id="btn-desc-copy">Copiar</button></div>
+            <div class="desc-scroll" id="desc-text">${esc(v.snippet.description)}</div>
+          </div>
         </details>
       </div>` : ""}
 
-      <div class="zone">
-        <div class="zone-head"><h3>🏷 Etiquetas de la miniatura <span class="hint">— palabras clave para encontrarla con "Buscar por miniatura"</span></h3></div>
-        <input class="inp tags-inp" id="tags-inp" placeholder="ej: mujer dorada cerebro galaxia azul meditación" value="${esc(tags)}">
-        ${S.ocr[v.id] ? `<div class="hint" style="margin-top:6px">🔤 Texto leído en la portada: "${esc(S.ocr[v.id])}"</div>` : S.ocr[v.id] === "" ? `<div class="hint" style="margin-top:6px">🔤 No se detectó texto en esta portada.</div>` : ""}
-      </div>
-
-      <div class="zone">
-        <div class="zone-head">
-          <h3>📄 Guion en Google Docs <span class="hint">— pega el link del Doc; con un clic lo abres</span></h3>
-          <div class="zone-actions"><button class="btn ghost" id="btn-doc-open">Abrir guion ↗</button></div>
+      <div class="vzone">
+        <div class="vzone-head">
+          <div class="vzone-title"><span class="vzone-ic">🔗</span> Guion en Google Docs</div>
+          <button class="btn ghost sm" id="btn-doc-open">Abrir ↗</button>
         </div>
-        <input class="inp" id="doc-url" placeholder="https://docs.google.com/document/d/…" value="${esc(docUrl)}">
-        <div class="hint" style="margin-top:6px">El guion vive en tu Google Docs — aquí solo guardas el link (entra en tus respaldos).</div>
-        <div style="display:flex; justify-content:flex-end; margin-top:12px"><button class="btn gold" id="btn-save">Guardar todo</button></div>
+        <input class="inp" id="doc-url" placeholder="Pega aquí el link del Doc del guion…" value="${esc(docUrl)}">
+        <div class="vzone-foot">
+          <span class="hint">Solo se guarda el link — el guion vive en tu Google Docs.</span>
+          <button class="btn gold sm" id="btn-save">Guardar</button>
+        </div>
       </div>
     </div>
   </div>`;
@@ -2639,7 +2657,7 @@ function bindMain() {
     if (!confirm("¿Cambiar la API key? Tus canales y sus datos no se tocan.")) return;
     S.apiKey = null; clearInterval(S.timer); render();
   });
-  $("sel-channel")?.addEventListener("change", (e) => switchChannel(e.target.value));
+  $("sel-channel")?.addEventListener("change", (e) => { closePNav(); switchChannel(e.target.value); });
   $("btn-ch-add")?.addEventListener("click", () => { S.addingChannel = true; render(); setTimeout(() => $("in-newch")?.focus(), 0); });
   $("btn-ch-cancel")?.addEventListener("click", () => { S.addingChannel = false; render(); });
   const addCh = () => { const v = $("in-newch")?.value.trim(); if (v) { S.addingChannel = false; addChannel(v); } else toast("Escribe el @handle o el ID del canal"); };
@@ -2653,6 +2671,7 @@ function bindMain() {
   $("sel-sort")?.addEventListener("change", e => { S.sortBy = e.target.value; render(); });
   document.querySelectorAll(".navitem").forEach(t => t.onclick = async () => {
     S.tab = t.dataset.tab;
+    closePNav();   // cierra el cajón hamburguesa al elegir sección (móvil)
     if (S.tab === "comentarios" && !S.commentsLoaded) { await loadComments(); }
     render();
     if (S.tab === "competencia") loadCompetitors(false);
@@ -2787,7 +2806,7 @@ function bindMain() {
     const id = S.selectedId;
     // el textarea de guion se quitó (el guion vive en el Doc); conserva lo ya guardado
     const text = $("script-area") ? $("script-area").value : (S.scripts[id] || "");
-    const tags = $("tags-inp").value.trim();
+    const tags = $("tags-inp") ? $("tags-inp").value.trim() : (S.tags[id] || "");
     const docUrl = ($("doc-url")?.value || "").trim();
     try {
       await idb.set("script:" + id, { text, updated: new Date().toISOString() });
