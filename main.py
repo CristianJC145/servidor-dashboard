@@ -142,6 +142,7 @@ def init_db():
             date TEXT NOT NULL,          -- YYYY-MM-DD
             title TEXT NOT NULL,
             url TEXT DEFAULT '',
+            done INTEGER DEFAULT 0,
             created_by INTEGER,
             created_at TEXT NOT NULL
         );
@@ -168,6 +169,7 @@ def init_db():
         ("users", "telegram_chat_id", "ALTER TABLE users ADD COLUMN telegram_chat_id TEXT DEFAULT ''"),
         ("users", "telegram_code", "ALTER TABLE users ADD COLUMN telegram_code TEXT DEFAULT ''"),
         ("users", "email", "ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''"),
+        ("calendar_events", "done", "ALTER TABLE calendar_events ADD COLUMN done INTEGER DEFAULT 0"),
     ]:
         cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         if col not in cols:
@@ -1689,6 +1691,21 @@ def calendar_update(event_id: int, body: CalEvent, admin: dict = Depends(require
     if cur.rowcount == 0:
         raise HTTPException(404, "Anotación no encontrada.")
     return {"ok": True}
+
+
+@app.post("/api/calendar/{event_id}/toggle")
+def calendar_toggle(event_id: int, admin: dict = Depends(require_admin)):
+    """Marca/desmarca la anotación como lista (verde)."""
+    conn = db()
+    row = conn.execute("SELECT done FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Anotación no encontrada.")
+    new = 0 if row["done"] else 1
+    conn.execute("UPDATE calendar_events SET done = ? WHERE id = ?", (new, event_id))
+    conn.commit()
+    conn.close()
+    return {"ok": True, "done": bool(new)}
 
 
 @app.delete("/api/calendar/{event_id}")

@@ -718,7 +718,20 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 }
 .calev.has-link{cursor:pointer}
 .calev.has-link:hover{border-color:rgba(255,178,76,.55); transform:translateY(-1px); box-shadow:0 6px 16px -8px rgba(0,0,0,.6)}
-.calev-t{font-weight:700; word-break:break-word}
+.calev-check{
+  flex:none; width:17px; height:17px; margin-top:1px; padding:0; border-radius:6px;
+  border:1.5px solid var(--line); background:rgba(0,0,0,.2); color:#fff;
+  font-size:11px; font-weight:800; line-height:1; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all .15s;
+}
+.calev-check:hover{border-color:#3ecf8e}
+.calev-check.static{cursor:default}
+.calev-t{font-weight:700; word-break:break-word; flex:1}
+/* anotación LISTA → verde */
+.calev.done{background:rgba(62,207,142,.10); border-color:rgba(62,207,142,.45)}
+.calev.done .calev-check{background:#3ecf8e; border-color:#3ecf8e; color:#04120b}
+.calev.done .calev-t{color:#7ee0b4; text-decoration:line-through; text-decoration-color:rgba(126,224,180,.5)}
+.calev.done.has-link:hover{border-color:rgba(62,207,142,.7)}
 .calev-acts{display:flex; gap:4px; flex:none; opacity:0; transition:opacity .15s}
 .calev:hover .calev-acts{opacity:1}
 .calev-acts button{background:none; border:none; color:var(--dim); font-size:12px; padding:0 2px; line-height:1}
@@ -1780,7 +1793,8 @@ async function renderCalendario(){
         </div>
         <div class="calevs">
           ${evs.map(e=>`
-            <div class="calev ${e.url?'has-link':''}" ${e.url?`onclick="window.open('${esc(e.url).replace(/'/g,"\\'")}','_blank')"`:''} title="${e.url?esc(e.url):''}">
+            <div class="calev ${e.url?'has-link':''} ${e.done?'done':''}" ${e.url?`onclick="window.open('${esc(e.url).replace(/'/g,"\\'")}','_blank')"`:''} title="${e.url?esc(e.url):''}">
+              ${isAdmin?`<button class="calev-check" onclick="event.stopPropagation();toggleCalDone(${e.id})" title="${e.done?'Marcar pendiente':'Marcar listo'}">${e.done?'✓':''}</button>`:`<span class="calev-check static">${e.done?'✓':''}</span>`}
               <span class="calev-t">${e.url?'🔗 ':''}${esc(e.title)}</span>
               ${isAdmin?`<span class="calev-acts">
                 <button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>
@@ -1834,6 +1848,10 @@ function openCalModal(ev){
 async function delCalEvent(id){
   if(!confirm('¿Quitar esta anotación?')) return;
   try{ await api(`/calendar/${id}`,{method:'DELETE'}); renderCalendario(); toast('Anotación quitada'); }
+  catch(e){ toast(e.message); }
+}
+async function toggleCalDone(id){
+  try{ const r = await api(`/calendar/${id}/toggle`,{method:'POST'}); renderCalendario(); toast(r.done?'Listo ✓':'Marcado pendiente'); }
   catch(e){ toast(e.message); }
 }
 
