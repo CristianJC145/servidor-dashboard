@@ -719,6 +719,7 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 .calev.clickable{cursor:pointer}
 .calev.clickable:hover{border-color:rgba(255,178,76,.4); transform:translateY(-1px); box-shadow:0 6px 16px -8px rgba(0,0,0,.6)}
 .calev-t{font-weight:700; word-break:break-word; flex:1}
+.calev-clip{font-style:normal; font-family:'Space Mono',monospace; font-size:10px; color:var(--dim); white-space:nowrap}
 .calev-acts a{text-decoration:none; font-size:12px; line-height:1; opacity:.7}
 .calev-acts a:hover{opacity:1}
 /* anotación LISTA → verde */
@@ -1789,7 +1790,7 @@ async function renderCalendario(){
             <div class="calev ${e.done?'done':''} ${isAdmin?'clickable':''}"
               ${isAdmin?`onclick="toggleCalDone(${e.id})"`:(e.url?`onclick="window.open('${esc(e.url).replace(/'/g,"\\'")}','_blank')" style="cursor:pointer"`:'')}
               title="${isAdmin?(e.done?'Clic para marcar pendiente':'Clic para marcar listo'):(e.url?esc(e.url):'')}">
-              <span class="calev-t">${esc(e.title)}</span>
+              <span class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</span>
               <span class="calev-acts">
                 ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
                 ${isAdmin?`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>
@@ -1812,13 +1813,34 @@ function openCalEdit(id, date){
 function openCalModal(ev){
   document.querySelectorAll('.overlay').forEach(o=>o.remove());
   const editing = !!ev.id;
+  let files = (ev.files||[]).slice();   // archivos ya guardados (si edito)
+  let queue = [];                        // archivos por subir (al crear)
+
+  const filesHTML = ()=>`
+    ${files.map(f=>`<div class="filerow">
+      <span class="kind">📎</span>
+      <a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.label)}</a>
+      <a class="dl" href="${esc(f.url)}" download="${esc(f.label)}" title="Descargar">⬇</a>
+      <button title="Quitar" onclick="calDelFile(${f.id})">✕</button>
+    </div>`).join('')}
+    ${queue.map((f,i)=>`<div class="filerow" style="opacity:.75">
+      <span class="kind">⏳</span>
+      <span style="flex:1;font-size:13px">${esc(f.name)} <i style="color:var(--dim)">(al guardar)</i></span>
+      <button title="Quitar" onclick="calUnqueue(${i})">✕</button>
+    </div>`).join('')}
+    ${(!files.length && !queue.length)?'<div style="font-size:12.5px;color:var(--dim)">Aún no hay archivos.</div>':''}`;
+
   const ov = document.createElement('div'); ov.className='overlay';
-  ov.innerHTML = `<div class="modal" style="max-width:440px">
+  ov.innerHTML = `<div class="modal" style="max-width:460px">
     <h2>${editing?'Editar anotación':'Nueva anotación'}</h2>
     <div class="sub">EN EL CALENDARIO</div>
     <label>Fecha</label><input id="ce-date" type="date" value="${esc(ev.date||'')}">
     <label>Anotación *</label><input id="ce-title" placeholder="Ej: Guion Drew" value="${esc(ev.title||'')}">
     <label>Link (opcional)</label><input id="ce-url" placeholder="🔗 pega un link (Docs, Drive…)" value="${esc(ev.url||'')}">
+    <label>Archivos</label>
+    <div class="filelist" id="ce-files">${filesHTML()}</div>
+    <div class="dropzone" id="ce-dz" style="padding:14px 12px"><span style="font-size:16px">⇪</span> Suelta un archivo aquí o haz click</div>
+    <input type="file" id="ce-file" multiple hidden>
     <div class="err" id="ce-err"></div>
     <div class="modal-actions">
       <button class="btn" id="ce-save">${editing?'Guardar':'Anotar'}</button>
@@ -1828,15 +1850,48 @@ function openCalModal(ev){
   document.body.appendChild(ov);
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
   $('#ce-title').focus();
+  const repaint = ()=>{ $('#ce-files').innerHTML = filesHTML(); };
+
+  // exponer helpers para los botones inline
+  window.calUnqueue = i=>{ queue.splice(i,1); repaint(); };
+  window.calDelFile = async id=>{
+    try{ await api(`/calendar/files/${id}`,{method:'DELETE'}); files = files.filter(f=>f.id!==id); repaint(); }
+    catch(e){ toast(e.message); }
+  };
+
+  // subir archivo: si la anotación ya existe, sube ya; si es nueva, va a la cola
+  wireDropzone($('#ce-dz'), $('#ce-file'), async picked=>{
+    if(editing){
+      const dz=$('#ce-dz');
+      for(let i=0;i<picked.length;i++){
+        dz.textContent = `Subiendo ${i+1}/${picked.length}…`;
+        const fd = new FormData(); fd.append('file', picked[i]);
+        try{ const nf = await apiUpload(`/calendar/${ev.id}/upload`, fd); files.push(nf); }
+        catch(e){ toast(e.message); }
+      }
+      dz.innerHTML='<span style="font-size:16px">⇪</span> Suelta un archivo aquí o haz click';
+      repaint();
+    } else { queue.push(...picked); repaint(); }
+  });
+
   $('#ce-save').onclick = async ()=>{
     const date=$('#ce-date').value, title=$('#ce-title').value.trim(), url=$('#ce-url').value.trim();
     if(!date){ $('#ce-err').textContent='Elige la fecha.'; return; }
     if(!title){ $('#ce-err').textContent='Escribe la anotación.'; return; }
+    const btn=$('#ce-save'); btn.disabled=true;
     try{
-      if(editing) await api(`/calendar/${ev.id}`,{method:'PATCH',body:JSON.stringify({date,title,url})});
-      else await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url})});
+      if(editing){ await api(`/calendar/${ev.id}`,{method:'PATCH',body:JSON.stringify({date,title,url})}); }
+      else{
+        btn.textContent='Creando…';
+        const nuevo = await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url})});
+        for(let i=0;i<queue.length;i++){
+          btn.textContent=`Subiendo ${i+1}/${queue.length}…`;
+          const fd=new FormData(); fd.append('file', queue[i]);
+          try{ await apiUpload(`/calendar/${nuevo.id}/upload`, fd); }catch(e){ toast(e.message); }
+        }
+      }
       ov.remove(); renderCalendario(); toast('Anotación guardada ✦');
-    }catch(e){ $('#ce-err').textContent=e.message; }
+    }catch(e){ $('#ce-err').textContent=e.message; btn.disabled=false; btn.textContent=editing?'Guardar':'Anotar'; }
   };
   $('#ce-title').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#ce-save').click(); });
 }

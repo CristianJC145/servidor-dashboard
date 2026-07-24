@@ -146,6 +146,15 @@ def init_db():
             created_by INTEGER,
             created_at TEXT NOT NULL
         );
+        -- archivos adjuntos a una anotación del calendario
+        CREATE TABLE IF NOT EXISTS calendar_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            label TEXT NOT NULL,
+            url TEXT NOT NULL,
+            size INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
         """
     )
     # migración: estados antiguos (4) → nuevos (3)
@@ -1654,8 +1663,19 @@ def calendar_list(start: str = "", end: str = "", user: dict = Depends(get_curre
             (start, end)).fetchall()
     else:
         rows = conn.execute("SELECT * FROM calendar_events ORDER BY date, id").fetchall()
+    out = [dict(r) for r in rows]
+    if out:
+        ids = [e["id"] for e in out]
+        marks = ",".join("?" * len(ids))
+        fmap: dict = {}
+        for f in conn.execute(
+            f"SELECT id, event_id, label, url, size FROM calendar_files WHERE event_id IN ({marks}) ORDER BY created_at",
+            ids).fetchall():
+            fmap.setdefault(f["event_id"], []).append(dict(f))
+        for e in out:
+            e["files"] = fmap.get(e["id"], [])
     conn.close()
-    return [dict(r) for r in rows]
+    return out
 
 
 @app.post("/api/calendar")
@@ -1708,9 +1728,68 @@ def calendar_toggle(event_id: int, admin: dict = Depends(require_admin)):
     return {"ok": True, "done": bool(new)}
 
 
+@app.post("/api/calendar/{event_id}/upload")
+async def calendar_upload(event_id: int, file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+    """Adjunta un archivo a una anotación. Se guarda en el servidor, organizado por fecha."""
+    conn = db()
+    ev = conn.execute("SELECT * FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
+    if not ev:
+        conn.close()
+        raise HTTPException(404, "Anotación no encontrada.")
+    original = os.path.basename(file.filename or "archivo")
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", original)[:120] or "archivo"
+    # carpeta por fecha: $DATA_DIR/uploads/calendario/<fecha>/
+    subdir = os.path.join(UPLOADS_DIR, "calendario", ev["date"])
+    os.makedirs(subdir, exist_ok=True)
+    stored = f"c{event_id}_{secrets.token_hex(4)}_{safe}"
+    dest = os.path.join(subdir, stored)
+    size = 0
+    try:
+        with open(dest, "wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD:
+                    raise HTTPException(400, "Archivo demasiado grande (máximo 500 MB).")
+                out.write(chunk)
+    except HTTPException:
+        if os.path.isfile(dest):
+            os.remove(dest)
+        conn.close()
+        raise
+    url = f"/uploads/calendario/{ev['date']}/{stored}"
+    cur = conn.execute(
+        "INSERT INTO calendar_files (event_id, label, url, size, created_at) VALUES (?,?,?,?,?)",
+        (event_id, original, url, size, now()))
+    conn.commit()
+    row = conn.execute("SELECT id, event_id, label, url, size FROM calendar_files WHERE id = ?",
+                       (cur.lastrowid,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.delete("/api/calendar/files/{file_id}")
+def calendar_file_delete(file_id: int, admin: dict = Depends(require_admin)):
+    conn = db()
+    f = conn.execute("SELECT * FROM calendar_files WHERE id = ?", (file_id,)).fetchone()
+    if f:
+        path = os.path.join(DATA_DIR, f["url"].lstrip("/"))
+        if os.path.isfile(path):
+            os.remove(path)
+        conn.execute("DELETE FROM calendar_files WHERE id = ?", (file_id,))
+        conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
 @app.delete("/api/calendar/{event_id}")
 def calendar_delete(event_id: int, admin: dict = Depends(require_admin)):
     conn = db()
+    # borrar también los archivos físicos adjuntos
+    for f in conn.execute("SELECT url FROM calendar_files WHERE event_id = ?", (event_id,)).fetchall():
+        path = os.path.join(DATA_DIR, f["url"].lstrip("/"))
+        if os.path.isfile(path):
+            os.remove(path)
+    conn.execute("DELETE FROM calendar_files WHERE event_id = ?", (event_id,))
     conn.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,))
     conn.commit()
     conn.close()
