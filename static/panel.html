@@ -590,28 +590,40 @@ const _ldb = {
    a variable de entorno + auth, porque ahora queda en la BD del servidor. */
 const LOCAL_ONLY = (key) => false;
 
-/* --- Capa publica: backend primero, IndexedDB de respaldo --- */
+/* --- Capa publica: backend + cache local IndexedDB ---
+   Al abrir se traen TODAS las claves de una sola vez (/api/kv_all) y se guardan en
+   el cache local; a partir de ahí get()/keys() leen del cache (instantaneo) en vez
+   de pedir clave por clave al VPS (eso hacia la carga lenta y a tirones). set()/del()
+   siguen escribiendo al servidor Y al cache, asi el cache queda siempre al dia. */
 const idb = {
   async open() {
     await _ldb.open();
+    NET.hydrated = false;
     try {
-      const r = await pfetch("/api/kv?prefix=__ping__");
-      NET.online = r.ok;
+      const r = await pfetch("/api/kv_all");
+      if (r.ok) {
+        const all = await r.json();
+        await Promise.all(Object.entries(all).map(([k, v]) => _ldb.set(k, v)));
+        NET.online = true;
+        NET.hydrated = true;   // el cache local ya refleja todo el servidor
+        return;
+      }
+      NET.online = false;
     } catch { NET.online = false; }
   },
   async get(key) {
-    if (LOCAL_ONLY(key)) return _ldb.get(key);
+    if (NET.hydrated || LOCAL_ONLY(key)) return _ldb.get(key); // cache: instantaneo
     if (NET.online) {
       try {
         const r = await pfetch("/api/kv/" + encodeURIComponent(key));
-        if (r.ok) { const v = await r.json(); _ldb.set(key, v); return v; } // espeja al cache local
+        if (r.ok) { const v = await r.json(); _ldb.set(key, v); return v; }
         NET.online = false;
       } catch { NET.online = false; }
     }
     return _ldb.get(key);
   },
   async set(key, val) {
-    _ldb.set(key, val); // respaldo local siempre
+    _ldb.set(key, val); // cache/respaldo local siempre
     if (LOCAL_ONLY(key)) return true; // la key no se sube al servidor
     if (NET.online) {
       try {
@@ -619,6 +631,21 @@ const idb = {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(val ?? null),
+        });
+        if (!r.ok) NET.online = false;
+      } catch { NET.online = false; }
+    }
+    return true;
+  },
+  /* Guarda muchas claves de un golpe (una sola peticion). Usado por importBackup. */
+  async setMany(obj) {
+    for (const [k, v] of Object.entries(obj)) _ldb.set(k, v); // cache local
+    if (NET.online) {
+      try {
+        const r = await pfetch("/api/kv_bulk", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(obj),
         });
         if (!r.ok) NET.online = false;
       } catch { NET.online = false; }
@@ -637,6 +664,7 @@ const idb = {
     return true;
   },
   async keys(prefix) {
+    if (NET.hydrated) return _ldb.keys(prefix); // cache: instantaneo
     if (NET.online) {
       try {
         const r = await pfetch("/api/kv?prefix=" + encodeURIComponent(prefix || ""));
@@ -821,7 +849,7 @@ async function importBackup(file) {
     const data = JSON.parse(await file.text());
     if (data._tipo !== "panel-canal-backup") throw new Error("no es un respaldo válido");
     if (data._version >= 4 && data.kv) {
-      for (const [k, v] of Object.entries(data.kv)) await idb.set(k, v);
+      await idb.setMany(data.kv); // una sola peticion en vez de cientos
     } else {
       /* respaldos antiguos (v3, de un solo canal): se escriben en formato legado y la migración los acomoda al recargar */
       if (data.snapshot) await idb.set("snapshot", data.snapshot);
@@ -2762,7 +2790,7 @@ $("file-import").addEventListener("change", (e) => {
       const existing = await idb.keys("");
       if (!existing.length) {
         const pre = JSON.parse(preEl.textContent);
-        if (pre && pre.kv) { for (const [k, v] of Object.entries(pre.kv)) await idb.set(k, v); }
+        if (pre && pre.kv) { await idb.setMany(pre.kv); }
       }
     }
   } catch (e) {}

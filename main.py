@@ -2158,6 +2158,42 @@ def panel_list_keys(prefix: str = "", user: dict = Depends(require_panel)):
     return [r["key"] for r in rows]
 
 
+@app.get("/panel/api/kv_all")
+def panel_get_all(prefix: str = "", user: dict = Depends(require_panel)):
+    """Devuelve TODAS las claves de una sola vez {clave: valor}. Evita cientos de
+    viajes al servidor (uno por clave), que hacían la carga lenta y a tirones."""
+    conn = db()
+    rows = conn.execute(
+        "SELECT key, value FROM panel_kv WHERE key LIKE ? ORDER BY key", (prefix + "%",)
+    ).fetchall()
+    conn.close()
+    # los valores ya están guardados como JSON: los concatenamos crudos para no
+    # re-serializar (más rápido y fiel), armando el objeto a mano.
+    parts = []
+    for r in rows:
+        parts.append(json.dumps(r["key"]) + ":" + (r["value"] if r["value"] else "null"))
+    return Response("{" + ",".join(parts) + "}", media_type=_JSON)
+
+
+@app.put("/panel/api/kv_bulk")
+async def panel_set_bulk(request: Request, user: dict = Depends(require_panel)):
+    """Guarda muchas claves de una sola vez {clave: valor}. Hace la restauración
+    del respaldo casi instantánea en vez de subir clave por clave."""
+    body = await request.body()
+    data = json.loads(body.decode("utf-8")) if body else {}
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Se esperaba un objeto {clave: valor}.")
+    conn = db()
+    conn.executemany(
+        "INSERT INTO panel_kv(key, value) VALUES(?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [(k, json.dumps(v, ensure_ascii=False)) for k, v in data.items()],
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "count": len(data)}
+
+
 @app.get("/panel/api/kv/{key:path}")
 def panel_get_key(key: str, user: dict = Depends(require_panel)):
     conn = db()
