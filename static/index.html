@@ -1022,7 +1022,7 @@ function renderApp(){
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
       <button class="nav-item" id="nav-buscar" onclick="setView({name:'buscar'})">${ICONS.buscar}<span>Buscar</span></button>
       <button class="nav-item" id="nav-calendario" onclick="setView({name:'calendario'})">${ICONS.cal}<span>Calendario</span></button>
-      ${ME.can_panel?`<button class="nav-item" id="nav-panel" onclick="setView({name:'panel'})">${ICONS.panel}<span>Panel de Canal</span></button>`:''}
+      ${ME.can_panel?`<button class="nav-item" id="nav-panel" onclick="setView({name:'panel'})">${ICONS.panel}<span>Panel de canales</span></button>`:''}
       <button class="nav-item" id="nav-notif" onclick="openNotif()">${ICONS.bell}<span>Notificaciones</span></button>
       ${isAdmin?`<button class="nav-item" id="nav-equipo" onclick="setView({name:'equipo'})">${ICONS.equipo}<span>Equipo</span></button>`:''}
       ${isAdmin?`<button class="nav-item" id="nav-ajustes" onclick="setView({name:'ajustes'})">${ICONS.ajustes}<span>Ajustes</span>
@@ -1672,7 +1672,7 @@ function workloadHTML(u){
 function renderPanel(){
   $('#view').innerHTML = `
   <div class="pagehead">
-    <div><h1>Panel de Canal</h1>
+    <div><h1>Panel de canales</h1>
     <div class="sub">Estadísticas de tus canales de YouTube — miniaturas, comentarios, competencia</div></div>
     <div class="actions"><a class="btn ghost" href="/panel" target="_blank" rel="noopener">Abrir en pantalla completa ↗</a></div>
   </div>

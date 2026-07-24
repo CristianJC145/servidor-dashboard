@@ -1429,7 +1429,6 @@ function mainHTML() {
   return `
   <div class="shell">
     <aside class="side">
-      <div class="side-brand"><b>Panel</b> de Canal<small>Estadísticas · Archivo</small></div>
       <div class="side-ch">
         <select class="sel" id="sel-channel" title="Cambiar de canal">
           ${S.channels.map(c => `<option value="${esc(c.input)}" ${c.input === S.activeInput ? "selected" : ""}>${esc(c.name || c.input)}</option>`).join("")}
