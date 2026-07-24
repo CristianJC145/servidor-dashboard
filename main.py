@@ -2539,7 +2539,9 @@ threading.Thread(target=_guiones_auto_loop, daemon=True).start()
 def panel_index():
     # Solo la cáscara HTML (sin datos). El JS lee el token del login (mismo origen)
     # y lo manda en cada llamada a /panel/api/kv, que sí exige permiso.
-    return FileResponse("static/panel.html")
+    # no-cache: el navegador revalida con el server (ETag) y toma la versión nueva tras cada deploy
+    # sin quedarse con una copia vieja (el iframe del panel es persistente).
+    return FileResponse("static/panel.html", headers={"Cache-Control": "no-cache"})
 
 
 # ---------------------------------------------------------------- frontend
@@ -2550,4 +2552,4 @@ app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 @app.get("/")
 def index():
-    return FileResponse("static/index.html")
+    return FileResponse("static/index.html", headers={"Cache-Control": "no-cache"})
