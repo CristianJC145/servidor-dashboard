@@ -12,6 +12,9 @@ import shutil
 import tarfile
 import tempfile
 import threading
+import smtplib
+import ssl
+from email.message import EmailMessage
 import time
 import sqlite3
 import secrets
@@ -133,6 +136,15 @@ def init_db():
             folder_id TEXT NOT NULL,
             PRIMARY KEY (account_id, channel_name)
         );
+        -- calendario: anotaciones por día (con link opcional)
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,          -- YYYY-MM-DD
+            title TEXT NOT NULL,
+            url TEXT DEFAULT '',
+            created_by INTEGER,
+            created_at TEXT NOT NULL
+        );
         """
     )
     # migración: estados antiguos (4) → nuevos (3)
@@ -155,10 +167,14 @@ def init_db():
         ("task_files", "size", "ALTER TABLE task_files ADD COLUMN size INTEGER DEFAULT 0"),
         ("users", "telegram_chat_id", "ALTER TABLE users ADD COLUMN telegram_chat_id TEXT DEFAULT ''"),
         ("users", "telegram_code", "ALTER TABLE users ADD COLUMN telegram_code TEXT DEFAULT ''"),
+        ("users", "email", "ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''"),
     ]:
         cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         if col not in cols:
             conn.execute(ddl)
+            # si acabamos de crear users.email, rellenar con el usuario cuando sea un correo
+            if table == "users" and col == "email":
+                conn.execute("UPDATE users SET email = username WHERE email = '' AND username LIKE '%@%'")
     # migración: cuenta única de Drive (en config) → tabla drive_accounts como "Servidor 1"
     n_acc = conn.execute("SELECT COUNT(*) AS c FROM drive_accounts").fetchone()["c"]
     if n_acc == 0:
@@ -545,7 +561,7 @@ def create_task(body: TaskCreate, admin: dict = Depends(require_admin)):
                  f"📥 <b>Nueva tarea:</b> {t['title']}\n"
                  f"Canal: {t['channel'] or '—'}"
                  + (f"\nAsignada a: {t['assigned_name']}" if t.get('assigned_name') else ""),
-                 exclude=admin["id"])
+                 exclude=admin["id"], subject=f"📥 Nueva tarea: {t['title']}")
     conn.close()
     return t
 
@@ -619,22 +635,22 @@ def patch_task(task_id: int, body: TaskPatch, user: dict = Depends(get_current_u
     if body.assigned_to is not None and body.assigned_to != t["assigned_to"] and body.assigned_to:
         notify_users(conn, [body.assigned_to],
                      f"📥 <b>Te asignaron una tarea:</b> {tt['title']}\nCanal: {tt['channel'] or '—'}",
-                     exclude=user["id"])
+                     exclude=user["id"], subject=f"📥 Te asignaron: {tt['title']}")
     if body.status is not None and body.status != t["status"]:
         if body.status == "revision":
             # revisión: solo a los admins
             notify_users(conn, admin_ids(conn),
                          f"🟠 <b>En revisión:</b> {tt['title']}\nLa pasó: {quien}",
-                         exclude=user["id"])
+                         exclude=user["id"], subject=f"🟠 En revisión: {tt['title']}")
         elif body.status == "terminado":
             # terminada: a TODO el equipo
             notify_users(conn, all_user_ids(conn),
                          f"✅ <b>Terminada:</b> {tt['title']}\nLa terminó: {quien}",
-                         exclude=user["id"])
+                         exclude=user["id"], subject=f"✅ Terminada: {tt['title']}")
         elif body.status == "pendiente" and t["status"] in ("revision", "terminado"):
             notify_users(conn, admin_ids(conn) + [tt["assigned_to"]],
                          f"↩️ <b>Volvió a pendiente:</b> {tt['title']}\nLa movió: {quien}",
-                         exclude=user["id"])
+                         exclude=user["id"], subject=f"↩️ Volvió a pendiente: {tt['title']}")
     conn.close()
     return tt
 
@@ -1610,11 +1626,78 @@ def finish_task(task_id: int, body: FinishBody, user: dict = Depends(get_current
                  f"✅ <b>Terminada y archivada:</b> {result['title']}\n"
                  f"Canal: {result['channel'] or '—'}\nLa terminó: {user['display_name']}"
                  + ("\n📁 Material guardado en Drive" if result.get("drive_folder_id") else ""),
-                 exclude=user["id"])
+                 exclude=user["id"], subject=f"✅ Terminada: {result['title']}")
     conn.close()
     result["cleaned_files"] = cleaned
     result["links_saved"] = links_saved
     return result
+
+
+# ---------------------------------------------------------------- calendario
+
+
+class CalEvent(BaseModel):
+    date: str
+    title: str
+    url: str = ""
+
+
+@app.get("/api/calendar")
+def calendar_list(start: str = "", end: str = "", user: dict = Depends(get_current_user)):
+    """Anotaciones del calendario. Si se dan start/end (YYYY-MM-DD) filtra por rango."""
+    conn = db()
+    if start and end:
+        rows = conn.execute(
+            "SELECT * FROM calendar_events WHERE date >= ? AND date <= ? ORDER BY date, id",
+            (start, end)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM calendar_events ORDER BY date, id").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/calendar")
+def calendar_create(body: CalEvent, admin: dict = Depends(require_admin)):
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", body.date.strip()):
+        raise HTTPException(400, "Fecha no válida.")
+    if not body.title.strip():
+        raise HTTPException(400, "Escribe una anotación.")
+    url = body.url.strip()
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        url = "https://" + url
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO calendar_events (date, title, url, created_by, created_at) VALUES (?,?,?,?,?)",
+        (body.date.strip(), body.title.strip(), url, admin["id"], now()))
+    conn.commit()
+    row = conn.execute("SELECT * FROM calendar_events WHERE id = ?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+@app.patch("/api/calendar/{event_id}")
+def calendar_update(event_id: int, body: CalEvent, admin: dict = Depends(require_admin)):
+    url = body.url.strip()
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        url = "https://" + url
+    conn = db()
+    cur = conn.execute(
+        "UPDATE calendar_events SET date = ?, title = ?, url = ? WHERE id = ?",
+        (body.date.strip(), body.title.strip(), url, event_id))
+    conn.commit()
+    conn.close()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Anotación no encontrada.")
+    return {"ok": True}
+
+
+@app.delete("/api/calendar/{event_id}")
+def calendar_delete(event_id: int, admin: dict = Depends(require_admin)):
+    conn = db()
+    conn.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- notificaciones Telegram
@@ -1638,20 +1721,56 @@ def tg_send_async(token: str, chat_ids: list, text: str):
     threading.Thread(target=run, daemon=True).start()
 
 
-def notify_users(conn, user_ids, text: str, exclude: int = None):
-    """Notifica por Telegram a los usuarios vinculados (menos a quien hizo la acción)."""
-    token = cfg_get(conn, "telegram_bot_token")
-    if not token:
-        return
+def email_send_async(host_cfg: dict, to_list: list, subject: str, body: str):
+    """Envía correos por SMTP (Gmail) en segundo plano."""
+    def run():
+        try:
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP(host_cfg["host"], host_cfg["port"], timeout=20) as s:
+                s.starttls(context=ctx)
+                s.login(host_cfg["user"], host_cfg["pass"])
+                for to in to_list:
+                    msg = EmailMessage()
+                    msg["Subject"] = subject
+                    msg["From"] = f'{host_cfg.get("from_name","SERVIDOR YOUTUBE")} <{host_cfg["user"]}>'
+                    msg["To"] = to
+                    msg.set_content(body)
+                    s.send_message(msg)
+        except Exception:
+            pass
+    threading.Thread(target=run, daemon=True).start()
+
+
+def smtp_cfg(conn):
+    user = cfg_get(conn, "smtp_user")
+    pw = cfg_get(conn, "smtp_pass")
+    if not (user and pw):
+        return None
+    return {"host": "smtp.gmail.com", "port": 587, "user": user, "pass": pw,
+            "from_name": "SERVIDOR YOUTUBE"}
+
+
+def notify_users(conn, user_ids, text: str, exclude: int = None, subject: str = "SERVIDOR YOUTUBE"):
+    """Notifica por Telegram Y por correo a los usuarios (menos a quien hizo la acción)."""
     ids = {u for u in user_ids if u and u != exclude}
     if not ids:
         return
     marks = ",".join("?" * len(ids))
-    chats = [r["telegram_chat_id"] for r in conn.execute(
-        f"SELECT telegram_chat_id FROM users WHERE id IN ({marks}) AND telegram_chat_id != '' AND active=1",
-        list(ids)).fetchall()]
-    if chats:
-        tg_send_async(token, chats, text)
+    rows = conn.execute(
+        f"SELECT telegram_chat_id, email FROM users WHERE id IN ({marks}) AND active=1",
+        list(ids)).fetchall()
+    token = cfg_get(conn, "telegram_bot_token")
+    if token:
+        chats = [r["telegram_chat_id"] for r in rows if r["telegram_chat_id"]]
+        if chats:
+            tg_send_async(token, chats, text)
+    scfg = smtp_cfg(conn)
+    if scfg:
+        emails = [r["email"] for r in rows if r["email"]]
+        if emails:
+            # el email va en texto plano (sin las etiquetas HTML de Telegram)
+            plain = text.replace("<b>", "").replace("</b>", "")
+            email_send_async(scfg, emails, subject, plain)
 
 
 def admin_ids(conn):
@@ -1767,6 +1886,78 @@ def telegram_unlink(user: dict = Depends(get_current_user)):
     conn.execute("UPDATE users SET telegram_chat_id = '', telegram_code = '' WHERE id = ?", (user["id"],))
     conn.commit()
     conn.close()
+    return {"ok": True}
+
+
+# ---- correo (SMTP Gmail) ----
+class SmtpConfig(BaseModel):
+    user: str
+    password: str
+
+
+class EmailBody(BaseModel):
+    email: str
+
+
+@app.get("/api/notify/status")
+def notify_status(user: dict = Depends(get_current_user)):
+    conn = db()
+    token = cfg_get(conn, "telegram_bot_token")
+    bot = cfg_get(conn, "telegram_bot_username")
+    me = conn.execute("SELECT telegram_chat_id, email FROM users WHERE id = ?", (user["id"],)).fetchone()
+    smtp_user = cfg_get(conn, "smtp_user")
+    conn.close()
+    return {
+        "tg_configured": bool(token), "bot_username": bot or "",
+        "tg_linked": bool(me and me["telegram_chat_id"]),
+        "email_configured": bool(smtp_user), "smtp_from": smtp_user or "",
+        "my_email": (me["email"] if me else "") or "",
+    }
+
+
+@app.post("/api/smtp/config")
+def smtp_config(body: SmtpConfig, admin: dict = Depends(require_admin)):
+    user_ = body.user.strip()
+    pw = body.password.strip().replace(" ", "")  # las app-password de Gmail traen espacios
+    try:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as s:
+            s.starttls(context=ctx)
+            s.login(user_, pw)
+    except Exception:
+        raise HTTPException(400, "No pude iniciar sesión. Verifica el correo y la contraseña de aplicación de Gmail.")
+    conn = db()
+    cfg_set(conn, "smtp_user", user_)
+    cfg_set(conn, "smtp_pass", pw)
+    conn.commit()
+    conn.close()
+    return {"ok": True, "smtp_from": user_}
+
+
+@app.post("/api/notify/email")
+def set_my_email(body: EmailBody, user: dict = Depends(get_current_user)):
+    email = body.email.strip()
+    if email and "@" not in email:
+        raise HTTPException(400, "Correo no válido.")
+    conn = db()
+    conn.execute("UPDATE users SET email = ? WHERE id = ?", (email, user["id"]))
+    conn.commit()
+    conn.close()
+    return {"ok": True, "email": email}
+
+
+@app.post("/api/notify/email-test")
+def email_test(user: dict = Depends(get_current_user)):
+    conn = db()
+    scfg = smtp_cfg(conn)
+    me = conn.execute("SELECT email FROM users WHERE id = ?", (user["id"],)).fetchone()
+    conn.close()
+    if not scfg:
+        raise HTTPException(400, "El administrador aún no configura el correo.")
+    if not (me and me["email"]):
+        raise HTTPException(400, "No has puesto tu correo.")
+    email_send_async(scfg, [me["email"]], "Prueba — SERVIDOR YOUTUBE",
+                     "✅ Esto es una prueba. Si lo recibes, los avisos por correo funcionan.")
     return {"ok": True}
 
 

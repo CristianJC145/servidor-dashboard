@@ -177,6 +177,16 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 .btn.danger{background:transparent; color:var(--danger); border:1px solid rgba(255,107,107,.4); box-shadow:none}
 .btn.sm{padding:8px 13px; font-size:12px}
 .btn:disabled{opacity:.5; cursor:default; box-shadow:none; transform:none}
+/* ===== feedback de presión (Emil Kowalski): todo lo pulsable responde al tacto ===== */
+.btn:active:not(:disabled){transform:scale(.97); filter:brightness(1.02); transition-duration:.09s}
+.nav-item:active{transform:scale(.98)}
+.sttab:active{transform:scale(.985)}
+.chcard:active,.task:active{transform:scale(.99); transition-duration:.09s}
+.qbtn:active,.roleselect:active,.backlink:active,.linkbtn:active{transform:scale(.96)}
+.fab-refresh:active{transform:scale(.9)}
+@media (hover:none){ /* en táctil, el press es el feedback principal */
+  .btn:active:not(:disabled){transform:scale(.96)}
+}
 
 /* ============ tarjetas de canal ============ */
 .chgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:20px}
@@ -185,7 +195,7 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
   position:relative; text-align:left; background:rgba(20,20,23,.55); border:1px solid var(--line-soft);
   border-radius:18px; padding:26px 26px 22px; color:var(--ink); overflow:hidden;
   box-shadow:var(--glass-hi), 0 6px 18px rgba(0,0,0,.28);
-  transition:transform .35s var(--ease), box-shadow .35s var(--ease), border-color .3s var(--ease), background .3s var(--ease);
+  transition:transform .22s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease), background .22s var(--ease);
 }
 .chcard:hover{
   border-color:rgba(255,138,61,.35); transform:translateY(-3px); background:rgba(26,25,28,.65);
@@ -283,9 +293,9 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
   border:1px solid var(--line); background:var(--card-grad); border-radius:16px; padding:16px 20px;
   color:var(--muted); font-weight:800; font-size:15px; text-align:left;
   box-shadow:var(--glass-hi), 0 10px 24px -16px rgba(0,0,0,.6);
-  transition:transform .35s var(--ease), box-shadow .35s var(--ease), border-color .3s var(--ease), color .2s;
+  transition:transform .22s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease), color .2s;
 }
-.sttab i{width:9px;height:9px;border-radius:50%;background:var(--tc);flex:none;opacity:.45;transition:all .3s var(--ease)}
+.sttab i{width:9px;height:9px;border-radius:50%;background:var(--tc);flex:none;opacity:.45;transition:opacity .3s var(--ease), box-shadow .3s var(--ease)}
 .sttab .n{
   margin-left:auto; font-family:'Space Mono',monospace; font-size:12px; color:var(--dim);
   background:rgba(0,0,0,.25); border-radius:99px; padding:1px 10px;
@@ -305,7 +315,7 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
   position:relative; background:var(--card-grad); border:1px solid var(--line); border-radius:20px;
   padding:20px 21px 18px; margin-bottom:14px; cursor:pointer; overflow:hidden;
   box-shadow:var(--card-shadow);
-  transition:transform .4s var(--ease), box-shadow .4s var(--ease), border-color .3s var(--ease);
+  transition:transform .24s var(--ease), box-shadow .24s var(--ease), border-color .24s var(--ease);
 }
 .task > *{position:relative; z-index:1}
 .task::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--stc,var(--line)); z-index:2; box-shadow:0 0 12px var(--stc)}
@@ -328,7 +338,7 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 .task .stlabel{font-family:'Space Mono',monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--stc,var(--dim)); flex:none}
 .qbtn{
   width:100%; margin-top:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--ink);
-  border-radius:9px; padding:7px 10px; font-size:12px; font-weight:800; transition:all .15s;
+  border-radius:9px; padding:7px 10px; font-size:12px; font-weight:800; transition:border-color .15s, color .15s, transform .15s;
 }
 .qbtn:hover{border-color:var(--blue); color:var(--blue)}
 .qbtn.gold:hover{border-color:var(--gold); color:var(--gold)}
@@ -669,6 +679,38 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 .filerow .stbadge.drive{color:var(--gold); background:var(--gold-soft)}
 .filerow .stbadge.server{color:var(--blue); background:var(--blue-soft)}
 
+/* ============ calendario (minimalista) ============ */
+.cal-nav{display:flex; gap:8px}
+.calgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:10px}
+.calday{
+  background:rgba(20,20,23,.5); border:1px solid var(--line-soft); border-radius:14px;
+  padding:12px 11px; min-height:150px; display:flex; flex-direction:column; gap:8px;
+}
+.calday.today{border-color:rgba(255,106,31,.5); box-shadow:inset 0 0 0 1px rgba(255,106,31,.18)}
+.calday-h{display:flex; flex-direction:column; gap:1px; padding-bottom:6px; border-bottom:1px solid var(--line-soft)}
+.calday-h b{font-family:'Unbounded'; font-size:12.5px; font-weight:600; letter-spacing:-.01em}
+.calday-h span{font-family:'Space Mono',monospace; font-size:10.5px; color:var(--dim); letter-spacing:.06em}
+.calday.today .calday-h b{color:var(--violet)}
+.calevs{display:flex; flex-direction:column; gap:6px; flex:1}
+.calempty{color:var(--line); font-size:13px; padding:2px}
+.calev{
+  display:flex; align-items:flex-start; gap:6px; justify-content:space-between;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:9px; padding:7px 9px;
+  font-size:12.5px; line-height:1.3; transition:border-color .15s, transform .15s;
+}
+.calev.has-link{cursor:pointer}
+.calev.has-link:hover{border-color:rgba(255,178,76,.5); transform:translateY(-1px)}
+.calev-t{font-weight:700; word-break:break-word}
+.calev-acts{display:flex; gap:3px; flex:none; opacity:0; transition:opacity .15s}
+.calev:hover .calev-acts{opacity:1}
+.calev-acts button{background:none; border:none; color:var(--dim); font-size:12px; padding:0 2px; line-height:1}
+.calev-acts button:hover{color:var(--violet)}
+.caladd{
+  background:none; border:1px dashed var(--line); border-radius:8px; color:var(--dim);
+  font-size:11.5px; font-weight:700; padding:6px; width:100%; transition:all .15s;
+}
+.caladd:hover{border-color:var(--violet); color:var(--violet)}
+
 /* ============ responsive ============ */
 @media(max-width:960px){
   .shell{grid-template-columns:1fr; grid-template-rows:auto 1fr}
@@ -777,6 +819,13 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
   .dropzone{padding:16px 10px}
   /* inputs no provocan zoom en iPhone si tienen ≥16px */
   input,select,textarea{font-size:16px}
+  /* calendario: los 7 días en una sola columna, tipo lista */
+  .calgrid{grid-template-columns:1fr; gap:8px}
+  .calday{min-height:0; flex-direction:row; flex-wrap:wrap; align-items:flex-start}
+  .calday-h{flex-direction:row; align-items:baseline; gap:8px; width:100%; border-bottom:none; padding-bottom:2px}
+  .calday-h b{font-size:14px}
+  .calevs{width:100%}
+  .calev-acts{opacity:1}
 }
 @media (prefers-reduced-motion:no-preference){
   .task,.modal,.chcard,.member{animation:up .2s ease}
@@ -817,6 +866,7 @@ const ICONS = {
   drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M8 3h8l6 10.5h-8z" opacity=".55"/><path d="M2 13.5 8 3l4 7-6 10.5z"/><path d="M22 13.5 18.5 20H6l3.5-6.5z" opacity=".8"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></svg>',
   bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5c0-3.3-2.7-6-6-6s-6 2.7-6 6c0 6-2.5 7-2.5 7h17S18 14.5 18 8.5"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>',
 };
 
 async function api(path, opts = {}) {
@@ -937,6 +987,7 @@ function renderApp(){
       <button class="nav-item" id="nav-pend" onclick="openDrawer()">${ICONS.pend}<span>Pendientes</span>
         <em class="badge ${nPend?'':'zero'}">${nPend}</em></button>
       <button class="nav-item" id="nav-buscar" onclick="setView({name:'buscar'})">${ICONS.buscar}<span>Buscar</span></button>
+      <button class="nav-item" id="nav-calendario" onclick="setView({name:'calendario'})">${ICONS.cal}<span>Calendario</span></button>
       <button class="nav-item" id="nav-notif" onclick="openNotif()">${ICONS.bell}<span>Notificaciones</span></button>
       ${isAdmin?`<button class="nav-item" id="nav-equipo" onclick="setView({name:'equipo'})">${ICONS.equipo}<span>Equipo</span></button>`:''}
       ${isAdmin?`<button class="nav-item" id="nav-ajustes" onclick="setView({name:'ajustes'})">${ICONS.ajustes}<span>Ajustes</span>
@@ -975,6 +1026,7 @@ function paintView(){
   if(VIEW.name==='equipo'){ $('#nav-equipo')?.classList.add('on'); renderEquipo(); }
   else if(VIEW.name==='ajustes'){ $('#nav-ajustes')?.classList.add('on'); renderAjustes(); }
   else if(VIEW.name==='buscar'){ $('#nav-buscar')?.classList.add('on'); renderBuscar(); }
+  else if(VIEW.name==='calendario'){ $('#nav-calendario')?.classList.add('on'); renderCalendario(); }
   else { $('#nav-canales')?.classList.add('on'); VIEW.name==='canal' ? renderCanal() : renderCanales(); }
 }
 
@@ -1659,47 +1711,162 @@ async function resetPass(id){
 }
 
 /* =============================== vista AJUSTES / DRIVE =============================== */
-/* =============================== notificaciones por Telegram =============================== */
+/* =============================== calendario semanal =============================== */
+let CAL_MONDAY = null;   // lunes de la semana mostrada (Date)
+
+function mondayOf(d){
+  const x = new Date(d); x.setHours(0,0,0,0);
+  const wd = (x.getDay()+6)%7;   // 0 = lunes
+  x.setDate(x.getDate()-wd);
+  return x;
+}
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function calShift(days){ CAL_MONDAY.setDate(CAL_MONDAY.getDate()+days); renderCalendario(); }
+function calToday(){ CAL_MONDAY = mondayOf(new Date()); renderCalendario(); }
+
+async function renderCalendario(){
+  const isAdmin = ME.role==='admin';
+  if(!CAL_MONDAY) CAL_MONDAY = mondayOf(new Date());
+  const days = [...Array(7)].map((_,i)=>{ const d=new Date(CAL_MONDAY); d.setDate(d.getDate()+i); return d; });
+  const start = ymd(days[0]), end = ymd(days[6]);
+  const hoy = ymd(new Date());
+  const DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+  let events = [];
+  try{ events = await api(`/calendar?start=${start}&end=${end}`); }catch(e){ toast(e.message); }
+  const byDay = {}; events.forEach(e=>{ (byDay[e.date] ||= []).push(e); });
+
+  const rango = `${days[0].getDate()} ${MES[days[0].getMonth()]} — ${days[6].getDate()} ${MES[days[6].getMonth()]} ${days[6].getFullYear()}`;
+
+  $('#view').innerHTML = `
+  <div class="pagehead">
+    <div><h1>Calendario</h1><div class="sub">${esc(rango)}</div></div>
+    <div class="actions cal-nav">
+      <button class="btn ghost sm" onclick="calShift(-7)">‹</button>
+      <button class="btn ghost sm" onclick="calToday()">Hoy</button>
+      <button class="btn ghost sm" onclick="calShift(7)">›</button>
+    </div>
+  </div>
+  <div class="calgrid">
+    ${days.map((d,i)=>{
+      const key = ymd(d);
+      const evs = byDay[key]||[];
+      const esHoy = key===hoy;
+      return `<div class="calday ${esHoy?'today':''}">
+        <div class="calday-h"><b>${DIAS[i]}</b><span>${d.getDate()} ${MES[d.getMonth()]}</span></div>
+        <div class="calevs">
+          ${evs.map(e=>`
+            <div class="calev ${e.url?'has-link':''}" ${e.url?`onclick="window.open('${esc(e.url).replace(/'/g,"\\'")}','_blank')"`:''} title="${e.url?esc(e.url):''}">
+              <span class="calev-t">${e.url?'🔗 ':''}${esc(e.title)}</span>
+              ${isAdmin?`<span class="calev-acts">
+                <button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>
+                <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
+              </span>`:''}
+            </div>`).join('') || '<div class="calempty">—</div>'}
+        </div>
+        ${isAdmin?`<button class="caladd" onclick="openCalNew('${esc(key)}')">+ anotar</button>`:''}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function openCalNew(date){ openCalModal({date}); }
+function openCalEdit(id, date){
+  api(`/calendar?start=${date}&end=${date}`).then(evs=>{
+    const e = evs.find(x=>x.id===id); if(e) openCalModal(e);
+  });
+}
+function openCalModal(ev){
+  document.querySelectorAll('.overlay').forEach(o=>o.remove());
+  const editing = !!ev.id;
+  const ov = document.createElement('div'); ov.className='overlay';
+  ov.innerHTML = `<div class="modal" style="max-width:440px">
+    <h2>${editing?'Editar anotación':'Nueva anotación'}</h2>
+    <div class="sub">EN EL CALENDARIO</div>
+    <label>Fecha</label><input id="ce-date" type="date" value="${esc(ev.date||'')}">
+    <label>Anotación *</label><input id="ce-title" placeholder="Ej: Guion Drew" value="${esc(ev.title||'')}">
+    <label>Link (opcional)</label><input id="ce-url" placeholder="🔗 pega un link (Docs, Drive…)" value="${esc(ev.url||'')}">
+    <div class="err" id="ce-err"></div>
+    <div class="modal-actions">
+      <button class="btn" id="ce-save">${editing?'Guardar':'Anotar'}</button>
+      <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  $('#ce-title').focus();
+  $('#ce-save').onclick = async ()=>{
+    const date=$('#ce-date').value, title=$('#ce-title').value.trim(), url=$('#ce-url').value.trim();
+    if(!date){ $('#ce-err').textContent='Elige la fecha.'; return; }
+    if(!title){ $('#ce-err').textContent='Escribe la anotación.'; return; }
+    try{
+      if(editing) await api(`/calendar/${ev.id}`,{method:'PATCH',body:JSON.stringify({date,title,url})});
+      else await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url})});
+      ov.remove(); renderCalendario(); toast('Anotación guardada ✦');
+    }catch(e){ $('#ce-err').textContent=e.message; }
+  };
+  $('#ce-title').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#ce-save').click(); });
+}
+async function delCalEvent(id){
+  if(!confirm('¿Quitar esta anotación?')) return;
+  try{ await api(`/calendar/${id}`,{method:'DELETE'}); renderCalendario(); toast('Anotación quitada'); }
+  catch(e){ toast(e.message); }
+}
+
+/* =============================== notificaciones (Telegram + Correo) =============================== */
 async function openNotif(){
   document.body.classList.remove('navopen');
   document.querySelectorAll('.overlay').forEach(o=>o.remove());
   let st;
-  try{ st = await api('/telegram/status'); }catch(e){ toast(e.message); return; }
+  try{ st = await api('/notify/status'); }catch(e){ toast(e.message); return; }
   const isAdmin = ME.role==='admin';
 
-  const cuerpo = st.linked ? `
-      <div class="dupwarn" style="border-color:rgba(255,178,76,.35)"><b>✅ Tu Telegram está vinculado</b>
-      Te llegarán avisos cuando haya tareas nuevas, pasen a revisión o se terminen.</div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="n-test">Enviar prueba</button>
-        <button class="btn danger" id="n-unlink">Desvincular</button>
-        <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button>
-      </div>`
-    : st.configured ? `
-      <p class="drive-help">Vincula tu Telegram para recibir los avisos de tareas.</p>
-      <div class="steps">
-        <div class="step"><span class="num">1</span><div class="stepbody">Pulsa <b>Vincular mi Telegram</b> — se abre el bot <b>@${esc(st.bot_username)}</b>.</div></div>
-        <div class="step"><span class="num">2</span><div class="stepbody">En Telegram dale a <b>INICIAR / START</b>.</div></div>
-        <div class="step"><span class="num">3</span><div class="stepbody">Vuelve aquí y pulsa <b>Verificar</b>.</div></div>
-      </div>
-      <div class="err" id="n-err"></div>
-      <div class="modal-actions">
-        <button class="btn" id="n-link">1️⃣ Vincular mi Telegram</button>
-        <button class="btn gold" id="n-verify" style="display:none">2️⃣ Ya le di START — Verificar</button>
-        <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button>
-      </div>`
-    : `<div class="dupwarn" style="margin-top:12px"><b>⚠ El bot de Telegram aún no está configurado</b>
-      ${isAdmin?'Configúralo aquí abajo — toma 2 minutos.':'Pídele al administrador que lo configure.'}</div>
-      ${isAdmin?'':`<div class="modal-actions"><button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button></div>`}`;
+  // --- bloque CORREO (para todos) ---
+  const emailBlock = `
+    <label style="margin-top:4px">📧 Tu correo para recibir avisos</label>
+    <div class="linkadd">
+      <input id="n-email" type="email" placeholder="tucorreo@gmail.com" value="${esc(st.my_email||'')}" autocomplete="email">
+      <button class="btn ghost sm" id="n-emailsave" type="button">Guardar</button>
+    </div>
+    ${st.email_configured
+      ? (st.my_email?`<div style="font-size:12px;color:var(--muted);margin-top:6px">✅ Te llegan avisos a <b>${esc(st.my_email)}</b>. <button class="linkbtn" id="n-emailtest">Enviar prueba</button></div>`
+                    :`<div style="font-size:12px;color:var(--dim);margin-top:6px">Pon tu correo para empezar a recibir avisos.</div>`)
+      : `<div style="font-size:12px;color:var(--dim);margin-top:6px">${isAdmin?'Configura el correo de envío abajo para activarlo.':'El administrador aún no activó el correo.'}</div>`}
+  `;
 
+  // --- bloque TELEGRAM (para todos) ---
+  const tgBlock = st.tg_linked ? `
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">✈️ <b style="color:var(--ink)">Telegram vinculado</b> ✓ · <button class="linkbtn" id="n-test">prueba</button> · <button class="linkbtn" id="n-unlink">desvincular</button></div>`
+    : st.tg_configured ? `
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">✈️ <b style="color:var(--ink)">Telegram</b> — recibe avisos también por aquí</div>
+      <div class="err" id="n-err" style="min-height:0"></div>
+      <div class="drive-actions" style="margin-top:8px">
+        <button class="btn ghost sm" id="n-link">1️⃣ Vincular Telegram</button>
+        <button class="btn gold sm" id="n-verify" style="display:none">2️⃣ Ya di START — Verificar</button>
+      </div>`
+    : `<div style="font-size:12.5px;color:var(--dim);margin-top:4px">✈️ Telegram: ${isAdmin?'configúralo abajo (opcional).':'no configurado.'}</div>`;
+
+  // --- config admin: correo de envío + bot ---
   const cfgAdmin = isAdmin ? `
       <div class="divider"></div>
-      <details class="drive-creds" ${st.configured?'':'open'}>
-        <summary>Bot de Telegram (administrador) ${st.configured?`· <span style="color:var(--gold)">@${esc(st.bot_username)} ✓</span>`:'· <span style="color:var(--danger)">falta configurar</span>'}</summary>
+      <details class="drive-creds" ${st.email_configured?'':'open'}>
+        <summary>📧 Correo de envío (administrador) ${st.email_configured?`· <span style="color:var(--gold)">${esc(st.smtp_from)} ✓</span>`:'· <span style="color:var(--danger)">falta</span>'}</summary>
         <p class="drive-help" style="font-size:12.5px">
-          1) En Telegram abre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> y envíale <code>/newbot</code>.<br>
-          2) Ponle un nombre (ej. "Servidor Youtube") y un usuario (ej. "servidor_yt_bot").<br>
-          3) Copia el <b>token</b> que te da y pégalo aquí:</p>
+          Los avisos se envían desde una cuenta de <b>Gmail</b>. Necesita una <b>contraseña de aplicación</b> (no tu clave normal):<br>
+          1) Activa la <b>verificación en 2 pasos</b> en <a href="https://myaccount.google.com/security" target="_blank" rel="noopener">tu cuenta Google</a>.<br>
+          2) Entra a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Contraseñas de aplicaciones</a>, crea una (nómbrala "Servidor") y copia los 16 caracteres.<br>
+          3) Pégalos aquí:</p>
+        <label>Correo Gmail de envío</label>
+        <input id="n-smtpuser" type="email" placeholder="tucorreo@gmail.com" value="${esc(st.smtp_from||'')}">
+        <label>Contraseña de aplicación (16 letras)</label>
+        <input id="n-smtppass" placeholder="abcd efgh ijkl mnop" autocomplete="off">
+        <div class="err" id="n-err3"></div>
+        <div class="drive-actions"><button class="btn ghost sm" id="n-savesmtp">Guardar correo</button></div>
+      </details>
+      <details class="drive-creds" ${st.tg_configured?'':''}>
+        <summary>✈️ Bot de Telegram (administrador, opcional) ${st.tg_configured?`· <span style="color:var(--gold)">@${esc(st.bot_username)} ✓</span>`:''}</summary>
+        <p class="drive-help" style="font-size:12.5px">En Telegram abre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> → <code>/newbot</code> → copia el token:</p>
         <label>Token del bot</label>
         <input id="n-token" placeholder="123456789:AAH…" autocomplete="off">
         <div class="err" id="n-err2"></div>
@@ -1707,55 +1874,68 @@ async function openNotif(){
       </details>` : '';
 
   const ov = document.createElement('div'); ov.className='overlay';
-  ov.innerHTML = `<div class="modal" style="max-width:520px">
+  ov.innerHTML = `<div class="modal" style="max-width:540px">
     <h2>🔔 Notificaciones</h2>
-    <div class="sub">AVISOS DE TAREAS POR TELEGRAM</div>
-    ${cuerpo}
+    <div class="sub">TE AVISAMOS CUANDO HAY TAREAS</div>
+    ${emailBlock}
+    <div class="divider"></div>
+    ${tgBlock}
     ${cfgAdmin}
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cerrar</button>
+    </div>
   </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
 
+  // correo del usuario
+  const emSave = $('#n-emailsave');
+  if(emSave) emSave.onclick = async ()=>{
+    const em = $('#n-email').value.trim();
+    emSave.disabled=true; emSave.textContent='…';
+    try{ await api('/notify/email',{method:'POST',body:JSON.stringify({email:em})}); ov.remove(); toast('Correo guardado ✦'); openNotif(); }
+    catch(e){ toast(e.message); emSave.disabled=false; emSave.textContent='Guardar'; }
+  };
+  const emTest = $('#n-emailtest');
+  if(emTest) emTest.onclick = async ()=>{ try{ await api('/notify/email-test',{method:'POST'}); toast('Correo de prueba enviado ✦'); }catch(e){ toast(e.message); } };
+
+  // telegram
   const lBtn = $('#n-link');
   if(lBtn) lBtn.onclick = async ()=>{
-    try{
-      const { url } = await api('/telegram/link',{method:'POST'});
-      window.open(url, '_blank');
-      $('#n-verify').style.display='';
-    }catch(e){ $('#n-err').textContent = e.message; }
+    try{ const { url } = await api('/telegram/link',{method:'POST'}); window.open(url,'_blank'); $('#n-verify').style.display=''; }
+    catch(e){ $('#n-err').textContent = e.message; }
   };
   const vBtn = $('#n-verify');
   if(vBtn) vBtn.onclick = async ()=>{
-    vBtn.disabled = true; vBtn.textContent = 'Verificando…';
+    vBtn.disabled=true; vBtn.textContent='Verificando…';
     try{
       const r = await api('/telegram/verify',{method:'POST'});
       if(r.linked){ ov.remove(); toast('🔔 Telegram vinculado ✦'); openNotif(); }
-      else{
-        $('#n-err').textContent = 'Aún no me llega tu START. Dale a INICIAR en el bot y verifica de nuevo.';
-        vBtn.disabled = false; vBtn.textContent = '2️⃣ Ya le di START — Verificar';
-      }
-    }catch(e){ $('#n-err').textContent = e.message; vBtn.disabled = false; vBtn.textContent = '2️⃣ Ya le di START — Verificar'; }
+      else{ $('#n-err').textContent='Aún no me llega tu START. Dale INICIAR en el bot y verifica.'; vBtn.disabled=false; vBtn.textContent='2️⃣ Ya di START — Verificar'; }
+    }catch(e){ $('#n-err').textContent=e.message; vBtn.disabled=false; vBtn.textContent='2️⃣ Ya di START — Verificar'; }
   };
   const tBtn = $('#n-test');
-  if(tBtn) tBtn.onclick = async ()=>{
-    try{ await api('/telegram/test',{method:'POST'}); toast('Mensaje de prueba enviado ✦'); }
-    catch(e){ toast(e.message); }
-  };
+  if(tBtn) tBtn.onclick = async ()=>{ try{ await api('/telegram/test',{method:'POST'}); toast('Prueba enviada ✦'); }catch(e){ toast(e.message); } };
   const uBtn = $('#n-unlink');
-  if(uBtn) uBtn.onclick = async ()=>{
-    if(!confirm('¿Dejar de recibir avisos en Telegram?')) return;
-    try{ await api('/telegram/unlink',{method:'POST'}); ov.remove(); toast('Telegram desvinculado'); }
-    catch(e){ toast(e.message); }
+  if(uBtn) uBtn.onclick = async ()=>{ if(!confirm('¿Dejar de recibir avisos en Telegram?'))return; try{ await api('/telegram/unlink',{method:'POST'}); ov.remove(); toast('Telegram desvinculado'); openNotif(); }catch(e){ toast(e.message); } };
+
+  // admin: correo de envío
+  const smBtn = $('#n-savesmtp');
+  if(smBtn) smBtn.onclick = async ()=>{
+    const u=$('#n-smtpuser').value.trim(), p=$('#n-smtppass').value.trim();
+    if(!u||!p){ $('#n-err3').textContent='Pon el correo y la contraseña de aplicación.'; return; }
+    smBtn.disabled=true; smBtn.textContent='Comprobando…';
+    try{ await api('/smtp/config',{method:'POST',body:JSON.stringify({user:u,password:p})}); ov.remove(); toast('Correo de envío conectado ✦'); openNotif(); }
+    catch(e){ $('#n-err3').textContent=e.message; smBtn.disabled=false; smBtn.textContent='Guardar correo'; }
   };
+  // admin: bot
   const sBtn = $('#n-savetoken');
   if(sBtn) sBtn.onclick = async ()=>{
-    const tok = $('#n-token').value.trim();
-    if(!tok){ $('#n-err2').textContent = 'Pega el token que te dio @BotFather.'; return; }
-    sBtn.disabled = true; sBtn.textContent = 'Comprobando…';
-    try{
-      const r = await api('/telegram/token',{method:'POST',body:JSON.stringify({token:tok})});
-      ov.remove(); toast(`Bot @${r.bot_username} conectado ✦`); openNotif();
-    }catch(e){ $('#n-err2').textContent = e.message; sBtn.disabled = false; sBtn.textContent = 'Guardar bot'; }
+    const tok=$('#n-token').value.trim();
+    if(!tok){ $('#n-err2').textContent='Pega el token del bot.'; return; }
+    sBtn.disabled=true; sBtn.textContent='Comprobando…';
+    try{ const r=await api('/telegram/token',{method:'POST',body:JSON.stringify({token:tok})}); ov.remove(); toast(`Bot @${r.bot_username} conectado ✦`); openNotif(); }
+    catch(e){ $('#n-err2').textContent=e.message; sBtn.disabled=false; sBtn.textContent='Guardar bot'; }
   };
 }
 
