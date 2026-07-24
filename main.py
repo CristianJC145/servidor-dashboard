@@ -1042,7 +1042,9 @@ def stats(user: dict = Depends(get_current_user)):
 # en la tabla config. Ver README para el paso a paso.
 
 DRIVE_ROOT_NAME = "SERVIDOR-VIDEOS"
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+DRIVE_SCOPE = ("https://www.googleapis.com/auth/drive.file "
+               "https://www.googleapis.com/auth/drive.readonly")
+GUIONES_FOLDER_NAME = "GUIONES PANEL MINIATURAS"
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 DRIVE_API = "https://www.googleapis.com/drive/v3"
@@ -1231,6 +1233,110 @@ def drive_upload_small(conn, name: str, content: str, folder_id: str) -> str:
     if status not in (200, 201) or "id" not in body:
         raise HTTPException(502, "No se pudo guardar el archivo de links en Drive.")
     return body["id"]
+
+
+# ------------------------------------------------ Guiones (auto-emparejar + respaldar)
+
+def _http_text(method: str, url: str, headers: dict, timeout: float = 25):
+    """Como _http_json pero devuelve texto crudo (para exportar Google Docs a text/plain)."""
+    req = urllib.request.Request(url, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return res.status, res.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+
+
+def _norm_title(s: str) -> str:
+    """Normaliza para comparar el título del video con la 1ª línea del guion."""
+    import unicodedata
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    s = re.sub(r"[^a-z0-9 ]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def drive_doc_text(token: str, file_id: str):
+    """Exporta un Google Doc a texto. Devuelve (primera_linea_no_vacia, texto_completo)."""
+    url = f"{DRIVE_API}/files/{file_id}/export?mimeType=text/plain"
+    status, text = _http_text("GET", url, {"Authorization": "Bearer " + token})
+    if status != 200:
+        return None, ""
+    text = text.lstrip("﻿")
+    first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    return first, text
+
+
+def drive_search_docs(token: str, phrase: str, limit: int = 10):
+    """Busca Google Docs cuyo CONTENIDO contiene 'phrase'. Devuelve [{id,name}]."""
+    ph = re.sub(r"['\\]", " ", phrase).strip()
+    if len(ph) < 4:
+        return []
+    q = (f"mimeType='application/vnd.google-apps.document' and "
+         f"fullText contains '{ph}' and trashed=false")
+    url = (f"{DRIVE_API}/files?q={urllib.parse.quote(q)}"
+           f"&fields=files(id,name)&pageSize={limit}&spaces=drive")
+    status, _, body = _http_json("GET", url, {"Authorization": "Bearer " + token})
+    return body.get("files", []) if status == 200 else []
+
+
+def _title_phrase(title: str) -> str:
+    """Frase distintiva del título para buscar en Docs (quita emojis, corta a ~60 chars)."""
+    t = re.sub(r"[^\w áéíóúñü:¿?¡!.,'-]", " ", title, flags=re.IGNORECASE)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t[:60]
+
+
+def match_guion_for_video(token: str, title: str):
+    """Devuelve (doc_url|None, estado). estado: 'match'|'ambiguo'|'no_encontrado'.
+    Señal definitiva: la 1ª línea del guion == el título del video."""
+    want = _norm_title(title)
+    if not want:
+        return None, "no_encontrado"
+    cands = drive_search_docs(token, _title_phrase(title))
+    if not cands:
+        return None, "no_encontrado"
+    for c in cands:
+        first, _ = drive_doc_text(token, c["id"])
+        if first and _norm_title(first) == want:
+            return f"https://docs.google.com/document/d/{c['id']}/edit", "match"
+    # ninguna 1ª línea coincidió exacto → hay candidatos pero dudoso
+    return None, "ambiguo"
+
+
+def _panel_kv_get(conn, key: str):
+    row = conn.execute("SELECT value FROM panel_kv WHERE key=?", (key,)).fetchone()
+    if not row or row["value"] is None:
+        return None
+    try:
+        return json.loads(row["value"])
+    except Exception:
+        return None
+
+
+def _panel_kv_set(conn, key: str, value):
+    conn.execute(
+        "INSERT INTO panel_kv(key,value) VALUES(?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, json.dumps(value, ensure_ascii=False)),
+    )
+
+
+def panel_channels(conn):
+    """Lista de canales del Panel desde panel_kv: [{input,id,name}]."""
+    chans = _panel_kv_get(conn, "channels") or []
+    return [c for c in chans if isinstance(c, dict)]
+
+
+def panel_channel_videos(conn, channel_id: str):
+    snap = _panel_kv_get(conn, f"ch:{channel_id}:snapshot") or {}
+    vids = snap.get("videos") or []
+    out = []
+    for v in vids:
+        vid = v.get("id")
+        sn = v.get("snippet") or {}
+        if vid:
+            out.append({"id": vid, "title": sn.get("title", ""), "published": sn.get("publishedAt", "")})
+    return out
 
 
 _alive_cache: dict = {}  # drive_id -> hasta cuándo vale el veredicto "sigue vivo"
@@ -2285,6 +2391,148 @@ def panel_del_key(key: str, user: dict = Depends(require_panel)):
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
+def drive_upsert_text(conn, token, name, content, folder_id):
+    """Crea o REEMPLAZA el contenido de un archivo de texto por nombre dentro de una carpeta."""
+    q = (f"name='{name.replace(chr(39), chr(92)+chr(39))}' and "
+         f"'{folder_id}' in parents and trashed=false")
+    url = f"{DRIVE_API}/files?q={urllib.parse.quote(q)}&fields=files(id)&spaces=drive"
+    status, _, body = _http_json("GET", url, {"Authorization": "Bearer " + token})
+    fid = (body.get("files") or [{}])[0].get("id") if status == 200 else None
+    data = content.encode("utf-8")
+    if fid:  # actualizar contenido (media)
+        up = f"https://www.googleapis.com/upload/drive/v3/files/{fid}?uploadType=media&fields=id"
+        _http_json("PATCH", up, {"Authorization": "Bearer " + token,
+                                 "Content-Type": "text/plain; charset=UTF-8"}, data, timeout=25)
+        return fid
+    return drive_upload_small(conn, name, content, folder_id)
+
+
+@app.get("/panel/api/guiones/status")
+def guiones_status(user: dict = Depends(require_panel)):
+    """Por canal: cuántos videos tienen guion (doc:) y cuántos faltan."""
+    conn = db()
+    out = []
+    for c in panel_channels(conn):
+        vids = panel_channel_videos(conn, c.get("id") or c.get("input"))
+        con = sum(1 for v in vids if _panel_kv_get(conn, f"doc:{v['id']}"))
+        out.append({"name": c.get("name") or c.get("input"), "input": c.get("input"),
+                    "id": c.get("id"), "total": len(vids), "con_guion": con,
+                    "faltan": len(vids) - con})
+    conn.close()
+    return {"channels": out}
+
+
+def _guiones_scan_run(conn, token, channel="", limit=40):
+    """Enlaza los guiones que faltan (1ª línea == título). Devuelve el reporte."""
+    chans = panel_channels(conn)
+    if channel:
+        chans = [c for c in chans if channel in (c.get("input"), c.get("id"))]
+    report = {"match": [], "ambiguo": [], "no_encontrado": [], "revisados": 0}
+    for c in chans:
+        for v in panel_channel_videos(conn, c.get("id") or c.get("input")):
+            if _panel_kv_get(conn, f"doc:{v['id']}"):
+                continue
+            if report["revisados"] >= limit:
+                break
+            report["revisados"] += 1
+            try:
+                url, estado = match_guion_for_video(token, v["title"])
+            except Exception:
+                estado, url = "no_encontrado", None
+            item = {"video": v["title"], "id": v["id"], "canal": c.get("name")}
+            if estado == "match" and url:
+                _panel_kv_set(conn, f"doc:{v['id']}", url)
+                item["doc"] = url
+                report["match"].append(item)
+            else:
+                report[estado].append(item)
+    conn.commit()
+    return report
+
+
+def _guiones_backup_run(conn, token, include_text=True):
+    """Guarda en Drive la copia de los guiones enlazados. Devuelve resumen."""
+    acc = active_account(conn)
+    root = drive_root_folder(conn, token, acc)
+    folder = drive_ensure_folder(conn, token, GUIONES_FOLDER_NAME, root)
+    index, saved = {}, 0
+    for c in panel_channels(conn):
+        cname = c.get("name") or c.get("input") or "canal"
+        lines = [f"GUIONES — {cname}", "=" * 60, ""]
+        index[cname] = []
+        for v in panel_channel_videos(conn, c.get("id") or c.get("input")):
+            doc = _panel_kv_get(conn, f"doc:{v['id']}")
+            if not doc:
+                continue
+            index[cname].append({"video": v["title"], "id": v["id"],
+                                 "published": v["published"], "doc": doc})
+            lines += [f"🎬 {v['title']}", f"📅 {v['published']}", f"🔗 {doc}"]
+            if include_text:
+                m = re.search(r"/document/d/([A-Za-z0-9_-]+)", doc)
+                if m:
+                    _, text = drive_doc_text(token, m.group(1))
+                    if text:
+                        lines += ["", "— — — GUION — — —", text.strip()]
+            lines += ["", "-" * 60, ""]
+            saved += 1
+        if index[cname]:
+            safe = re.sub(r'[\\/:*?"<>|]+', " ", cname).strip()[:80]
+            drive_upsert_text(conn, token, f"GUIONES - {safe}.txt", "\n".join(lines), folder)
+    drive_upsert_text(conn, token, "guiones-index.json",
+                      json.dumps(index, ensure_ascii=False, indent=2), folder)
+    return {"guardados": saved, "carpeta": GUIONES_FOLDER_NAME, "link": drive_folder_link(folder)}
+
+
+@app.post("/panel/api/guiones/scan")
+def guiones_scan(channel: str = "", limit: int = 40, admin: dict = Depends(require_admin)):
+    """Busca en tus Google Docs y enlaza los guiones que faltan. channel vacío = TODOS.
+    Necesita Drive reconectado con permiso de lectura."""
+    conn = db()
+    try:
+        token = drive_access_token(conn)
+        report = _guiones_scan_run(conn, token, channel, limit)
+    finally:
+        conn.close()
+    return {"ok": True, **report,
+            "resumen": f"{len(report['match'])} enlazados, "
+                       f"{len(report['ambiguo'])} dudosos, {len(report['no_encontrado'])} sin encontrar"}
+
+
+@app.post("/panel/api/guiones/backup")
+def guiones_backup(include_text: bool = True, admin: dict = Depends(require_admin)):
+    """Copia en Drive (carpeta 'GUIONES PANEL MINIATURAS') los guiones enlazados; con include_text
+    guarda hasta el texto completo. Sobrevive aunque borres un canal del Panel."""
+    conn = db()
+    try:
+        token = drive_access_token(conn)
+        res = _guiones_backup_run(conn, token, include_text)
+    finally:
+        conn.close()
+    return {"ok": True, **res}
+
+
+def _guiones_auto_loop():
+    """Rutina 24/7: cada 12 h enlaza los guiones que faltan y respalda en Drive.
+    Silenciosa: si Drive no está conectado o no hay data, no hace nada."""
+    time.sleep(45)  # deja arrancar el server
+    while True:
+        try:
+            conn = db()
+            try:
+                token = drive_access_token(conn)   # lanza si no hay Drive
+                _guiones_scan_run(conn, token, "", limit=30)
+                _guiones_backup_run(conn, token, include_text=True)
+                print("[guiones] escaneo + respaldo automático hechos")
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[guiones] auto omitido: {e}")
+        time.sleep(12 * 3600)
+
+
+threading.Thread(target=_guiones_auto_loop, daemon=True).start()
 
 
 @app.get("/panel")

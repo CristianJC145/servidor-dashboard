@@ -81,6 +81,11 @@ body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:2
 .search-wrap { flex: 1; min-width: 240px; position: relative; }
 .search-wrap .inp { width: 100%; padding-left: 36px; }
 .search-icon { position: absolute; left: 12px; top: 10px; color: #A29C97; pointer-events: none; }
+.guiones-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07); border-radius: 12px;
+  padding: 10px 13px; margin-bottom: 12px; }
+.guiones-bar .gb-txt { font-size: 14px; }
+.guiones-bar .gb-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 .search-modes { display: flex; gap: 6px; margin-bottom: 12px; }
 .smode { background: #1a1a1d; border: 1px solid #343439; color: #A29C97; border-radius: 999px;
   padding: 7px 16px; font: 600 12.5px 'Space Grotesk', sans-serif; cursor: pointer; letter-spacing: .3px; }
@@ -1473,6 +1478,49 @@ const ICN = {
 function togglePNav(){ document.body.classList.toggle("pnav-open"); }
 function closePNav(){ document.body.classList.remove("pnav-open"); }
 
+/* ===== Guiones: estado, buscar (auto-emparejar) y respaldar en Drive ===== */
+async function loadGuionesStatus(){
+  const el = document.getElementById("gb-status"); if(!el) return;
+  try{
+    const r = await pfetch("/api/guiones/status");
+    if(!r.ok){ el.textContent = ""; return; }
+    const d = await r.json();
+    const cur = (d.channels||[]).find(c => c.input === S.activeInput) || (d.channels||[])[0];
+    if(cur) el.textContent = `— ${cur.con_guion}/${cur.total} con guion` + (cur.faltan? ` · faltan ${cur.faltan}`:" ✓");
+    else el.textContent = "";
+  }catch{ el.textContent=""; }
+}
+async function guionesScan(){
+  const b = document.getElementById("btn-guiones-scan"); if(!b) return;
+  const prev = b.textContent; b.disabled = true; b.textContent = "🔎 Buscando en tus Docs…";
+  try{
+    const r = await pfetch("/api/guiones/scan?channel=" + encodeURIComponent(S.activeInput||""), { method:"POST" });
+    const d = await r.json();
+    if(!r.ok){ toast(d.detail || "No se pudo buscar (¿Drive con permiso de lectura?)"); }
+    else { toast("📜 " + d.resumen); if(d.match && d.match.length){ await fullReloadKV(); render(); } }
+  }catch(e){ toast("Error: " + e.message); }
+  b.disabled = false; b.textContent = prev; loadGuionesStatus();
+}
+async function guionesBackup(){
+  const b = document.getElementById("btn-guiones-backup"); if(!b) return;
+  const prev = b.textContent; b.disabled = true; b.textContent = "☁ Guardando en Drive…";
+  try{
+    const r = await pfetch("/api/guiones/backup", { method:"POST" });
+    const d = await r.json();
+    if(!r.ok) toast(d.detail || "No se pudo respaldar (¿Drive conectado?)");
+    else toast(`☁ Respaldado: ${d.guardados} guiones en «${d.carpeta}» ✓`);
+  }catch(e){ toast("Error: " + e.message); }
+  b.disabled = false; b.textContent = prev;
+}
+/* refresca el estado local desde el servidor tras enlazar guiones nuevos */
+async function fullReloadKV(){
+  try{
+    const r = await pfetch("/api/kv_all");
+    if(r.ok){ const all = await r.json(); for(const [k,v] of Object.entries(all)) await _ldb.set(k, v);
+      S.docs = {}; for(const k of await idb.keys("doc:")) S.docs[k.slice(4)] = await idb.get(k); }
+  }catch{}
+}
+
 function mainHTML() {
   const ch = S.channel;
   const totalDelta = Object.values(S.deltas).reduce((a,b)=>a+b,0);
@@ -1559,6 +1607,13 @@ function mainHTML() {
     <button class="btn gold" id="btn-retry">Reintentar</button></div>` : ""}
 
   ${S.tab === "videos" ? `
+    <div class="guiones-bar">
+      <div class="gb-txt">📜 <b>Guiones</b> <span id="gb-status" class="hint">— revisando…</span></div>
+      <div class="gb-acts">
+        <button class="btn ghost sm" id="btn-guiones-scan" title="Busca en tus Google Docs y enlaza los guiones que faltan">🔎 Buscar los que faltan</button>
+        <button class="btn gold sm" id="btn-guiones-backup" title="Guarda una copia de los guiones en tu Drive">☁ Respaldar en Drive</button>
+      </div>
+    </div>
     <div class="search-modes">
       <button class="smode ${S.searchMode==="titulo"?"on":""}" data-mode="titulo">🔤 Por título</button>
       <button class="smode ${S.searchMode==="miniatura"?"on":""}" data-mode="miniatura">🖼 Por miniatura</button>
@@ -2748,6 +2803,9 @@ function bindMain() {
     cs.addEventListener("input", () => { clearTimeout(cT); cT = setTimeout(() => { S.cSearch = cs.value; render(); setTimeout(() => { const el = $("in-csearch"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0); }, 350); });
   }
   document.querySelectorAll(".smode[data-mode]").forEach(m => m.onclick = () => { S.searchMode = m.dataset.mode; render(); setTimeout(() => $("in-search")?.focus(), 0); });
+  loadGuionesStatus();
+  $("btn-guiones-scan")?.addEventListener("click", guionesScan);
+  $("btn-guiones-backup")?.addEventListener("click", guionesBackup);
   $("btn-ocr")?.addEventListener("click", runOcr);
   document.querySelectorAll(".card, .hot-item, .tr-item, .q-item").forEach(c => c.onclick = () => { S.selectedId = c.dataset.id; render(); });
   document.querySelectorAll(".rchip").forEach(r => r.onclick = () => { S.rangeMs = +r.dataset.ms; render(); });
