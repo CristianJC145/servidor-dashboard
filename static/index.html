@@ -1010,6 +1010,32 @@ async function boot(){
   }catch(e){ renderLogin(false); }
 }
 
+function openMyPassword(){
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="modal" style="max-width:420px">
+    <h2>Cambiar mi contraseña</h2>
+    <div class="sub">ESCRIBE TU NUEVA CLAVE — SE GUARDA AL INSTANTE</div>
+    <label>Nueva contraseña (mínimo 6)</label><input id="mp-new" type="text" placeholder="tu nueva clave">
+    <label>Repetir</label><input id="mp-rep" type="text" placeholder="otra vez la misma">
+    <div class="err" id="mp-err"></div>
+    <div class="modal-actions">
+      <button class="btn" id="mp-save">Guardar clave</button>
+      <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  $('#mp-save').onclick=async()=>{
+    const n=$('#mp-new').value, r=$('#mp-rep').value;
+    if(n.length<6){ $('#mp-err').textContent='Mínimo 6 caracteres.'; return; }
+    if(n!==r){ $('#mp-err').textContent='Las dos claves no coinciden.'; return; }
+    try{
+      await api('/me/password',{method:'POST',body:JSON.stringify({new_password:n})});
+      ov.remove(); toast('Contraseña cambiada ✓ La próxima vez entra con la nueva.');
+    }catch(e){ $('#mp-err').textContent=e.message; }
+  };
+}
+
 async function refresh(){
   [USERS, TASKS, CHANNELS, STATS, DRIVE] = await Promise.all([
     api('/users'), api('/tasks'), api('/channels'), api('/stats'),
@@ -1094,8 +1120,8 @@ function renderApp(){
         ${DRIVE.has_credentials&&!DRIVE.connected?'<em class="badge" style="background:var(--danger)">!</em>':''}</button>`:''}
       <div class="foot">
         <div class="avatar ${isAdmin?'gold':''}">${esc(ME.display_name[0]?.toUpperCase()||'?')}</div>
-        <div class="who"><b>${esc(ME.display_name)}</b><span>${isAdmin?'Administrador':'Editor'}</span></div>
-        <button class="linkbtn" onclick="logout()" title="Cerrar sesión">Salir</button>
+        <div class="who"><b>${esc(ME.display_name)}</b>
+          <span><button class="linkbtn" onclick="openMyPassword()" title="Cambiar mi contraseña">🔑 Clave</button> · <button class="linkbtn" onclick="logout()" title="Cerrar sesión">Salir</button></span></div>
       </div>
     </aside>
     <div class="navback" onclick="document.body.classList.remove('navopen')"></div>
@@ -1820,7 +1846,8 @@ function renderEquipo(){
       ${u.id!==ME.id?`
         <button class="btn ghost sm" onclick="toggleUser(${u.id},${u.active?'false':'true'})">${u.active?'Desactivar':'Activar'}</button>
         <button class="btn ghost sm" onclick="resetPass(${u.id})">Nueva clave</button>
-      `:'<span class="youtag">— esta es tu cuenta —</span>'}
+      `:`<button class="btn ghost sm" onclick="openMyPassword()">🔑 Cambiar mi clave</button>
+        <span class="youtag" style="margin-left:8px">— tu cuenta —</span>`}
       </div>
     </div>`).join('')}
   </div>`;

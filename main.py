@@ -412,6 +412,28 @@ def me(user: dict = Depends(get_current_user)):
     return user_public(user)
 
 
+class MyPassword(BaseModel):
+    new_password: str
+    current_password: Optional[str] = None
+
+
+@app.post("/api/me/password")
+def change_my_password(body: MyPassword, user: dict = Depends(get_current_user)):
+    """El usuario logueado cambia su propia contraseña. Si manda current_password, se verifica;
+    si no, basta con estar logueado (útil si la olvidó pero sigue con sesión abierta)."""
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "La contraseña debe tener al menos 6 caracteres.")
+    if body.current_password is not None:
+        if not verify_password(body.current_password, user["password_hash"]):
+            raise HTTPException(400, "La contraseña actual no es correcta.")
+    conn = db()
+    conn.execute("UPDATE users SET password_hash = ? WHERE id = ?",
+                 (hash_password(body.new_password), user["id"]))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------- usuarios
 
 
