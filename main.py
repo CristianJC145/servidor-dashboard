@@ -1042,8 +1042,7 @@ def stats(user: dict = Depends(get_current_user)):
 # en la tabla config. Ver README para el paso a paso.
 
 DRIVE_ROOT_NAME = "SERVIDOR-VIDEOS"
-DRIVE_SCOPE = ("https://www.googleapis.com/auth/drive.file "
-               "https://www.googleapis.com/auth/drive.readonly")
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 GUIONES_FOLDER_NAME = "GUIONES PANEL MINIATURAS"
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"

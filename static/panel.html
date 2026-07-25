@@ -1498,10 +1498,8 @@ async function guionesScan(){
     const d = await r.json();
     if(!r.ok){ toast(d.detail || "No se pudo buscar (¿Drive con permiso de lectura?)"); }
     else {
-      toast("📜 " + d.resumen);
-      if(d.match && d.match.length){ await fullReloadKV(); render(); }
-      // no enlazó nada → muestra el diagnóstico para entender por qué
-      else if((d.revisados||0) > 0){ await guionesDebug(true); }
+      if(d.match && d.match.length){ toast("📜 " + d.resumen); await fullReloadKV(); render(); }
+      else { toast("No encontró guiones nuevos para enlazar automáticamente."); }
     }
   }catch(e){ toast("Error: " + e.message); }
   b.disabled = false; b.textContent = prev; loadGuionesStatus();
