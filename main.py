@@ -187,6 +187,7 @@ def init_db():
         ("users", "panel_access", "ALTER TABLE users ADD COLUMN panel_access INTEGER DEFAULT 0"),
         ("calendar_events", "done", "ALTER TABLE calendar_events ADD COLUMN done INTEGER DEFAULT 0"),
         ("calendar_events", "channel", "ALTER TABLE calendar_events ADD COLUMN channel TEXT DEFAULT ''"),
+        ("calendar_events", "task_id", "ALTER TABLE calendar_events ADD COLUMN task_id INTEGER DEFAULT NULL"),
     ]:
         cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         if col not in cols:
@@ -600,6 +601,36 @@ def get_task(task_id: int, user: dict = Depends(get_current_user)):
     return t
 
 
+def _cal_date_for_task(due: str) -> str:
+    """La nota va en la fecha de la tarea (due_date). Si no tiene, en el día de hoy."""
+    d = (due or "").strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+        return d
+    return datetime.now().astimezone().date().isoformat()
+
+
+def sync_task_calendar(conn, task):
+    """Crea o actualiza la nota del calendario ligada a una tarea (clic en ella abre la tarea).
+    No bloquea el flujo si algo falla."""
+    if not task:
+        return
+    try:
+        date = _cal_date_for_task(task.get("due_date"))
+        row = conn.execute("SELECT id FROM calendar_events WHERE task_id = ?", (task["id"],)).fetchone()
+        if row:
+            conn.execute("UPDATE calendar_events SET date=?, title=?, channel=? WHERE id=?",
+                         (date, task["title"], task.get("channel", ""), row["id"]))
+        else:
+            conn.execute(
+                "INSERT INTO calendar_events (date, title, url, channel, task_id, created_by, created_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (date, task["title"], "", task.get("channel", ""), task["id"],
+                 task.get("created_by"), now()))
+        conn.commit()
+    except Exception:
+        pass
+
+
 @app.post("/api/tasks")
 def create_task(body: TaskCreate, admin: dict = Depends(require_admin)):
     if body.priority not in PRIORITIES:
@@ -619,6 +650,7 @@ def create_task(body: TaskCreate, admin: dict = Depends(require_admin)):
     )
     conn.commit()
     t = task_full(conn, cur.lastrowid)
+    sync_task_calendar(conn, t)   # 📅 aparece en el calendario, ligada a la tarea
     # 🔔 nueva tarea: avisar a TODO el equipo
     notify_users(conn, all_user_ids(conn),
                  f"📥 <b>Nueva tarea:</b> {t['title']}\n"
@@ -693,6 +725,7 @@ def patch_task(task_id: int, body: TaskPatch, user: dict = Depends(get_current_u
         conn.execute(f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?", params)
         conn.commit()
     tt = task_full(conn, task_id)
+    sync_task_calendar(conn, tt)   # 📅 mantiene la nota del calendario al día (fecha/título/canal)
     # 🔔 avisos por Telegram (sin notificar a quien hizo la acción)
     quien = user["display_name"]
     if body.assigned_to is not None and body.assigned_to != t["assigned_to"] and body.assigned_to:
@@ -722,6 +755,7 @@ def patch_task(task_id: int, body: TaskPatch, user: dict = Depends(get_current_u
 def delete_task(task_id: int, admin: dict = Depends(require_admin)):
     conn = db()
     cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.execute("DELETE FROM calendar_events WHERE task_id = ?", (task_id,))  # 📅 quita su nota
     conn.commit()
     conn.close()
     if cur.rowcount == 0:
@@ -824,6 +858,40 @@ def delete_file(file_id: int, user: dict = Depends(get_current_user)):
         if os.path.isfile(path):
             os.remove(path)
     return {"ok": True}
+
+
+class TaskNotify(BaseModel):
+    kind: str  # "revisado" | "ecualizado"
+
+
+TASK_NOTIFY_LABELS = {
+    "revisado": "🎧 Audio revisado — terminado",
+    "ecualizado": "🎚️ Audio ecualizado — terminado",
+}
+
+
+@app.post("/api/tasks/{task_id}/notify")
+def task_notify(task_id: int, body: TaskNotify, user: dict = Depends(get_current_user)):
+    """Aviso rápido ligado a una tarea (p. ej. 'Audio revisado terminado' / 'Audio ecualizado
+    terminado'). Va a los administradores y al asignado, menos a quien lo envía."""
+    label = TASK_NOTIFY_LABELS.get(body.kind)
+    if not label:
+        raise HTTPException(400, "Tipo de aviso no válido.")
+    conn = db()
+    t = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if not t:
+        conn.close()
+        raise HTTPException(404, "Tarea no encontrada.")
+    targets = [r["id"] for r in conn.execute(
+        "SELECT id FROM users WHERE role='admin' AND active=1").fetchall()]
+    if t["assigned_to"]:
+        targets.append(t["assigned_to"])
+    notify_users(conn, targets,
+                 f"{label}\n<b>Tarea:</b> {t['title']}\n"
+                 f"Canal: {t['channel'] or '—'}\nPor: {user['display_name']}",
+                 exclude=user["id"], subject=f"{label} — {t['title']}")
+    conn.close()
+    return {"ok": True, "label": label}
 
 
 # ---------------------------------------------------------------- extras
@@ -1254,6 +1322,36 @@ def drive_upload_small(conn, name: str, content: str, folder_id: str) -> str:
         payload, timeout=20)
     if status not in (200, 201) or "id" not in body:
         raise HTTPException(502, "No se pudo guardar el archivo de links en Drive.")
+    return body["id"]
+
+
+AUDIOS_FOLDER_NAME = "AUDIOS PARA REVISAR"
+
+
+def drive_upload_media(token: str, name: str, filepath: str, folder_id: str,
+                       mime: str = "application/octet-stream") -> str:
+    """Sube un archivo (p. ej. audio) a Drive por sesión resumable (sin cargarlo entero en
+    memoria). Devuelve el id del archivo en Drive."""
+    size = os.path.getsize(filepath)
+    meta = json.dumps({"name": name, "parents": [folder_id]}).encode()
+    init = urllib.request.Request(
+        DRIVE_UPLOAD + "&fields=id", data=meta, method="POST",
+        headers={"Authorization": "Bearer " + token,
+                 "Content-Type": "application/json; charset=UTF-8",
+                 "X-Upload-Content-Type": mime,
+                 "X-Upload-Content-Length": str(size)})
+    with urllib.request.urlopen(init, timeout=30) as res:
+        session_uri = res.headers.get("Location") or res.headers.get("location")
+    if not session_uri:
+        raise HTTPException(502, "No se pudo iniciar la subida del audio a Drive.")
+    with open(filepath, "rb") as f:
+        put = urllib.request.Request(
+            session_uri, data=f, method="PUT",
+            headers={"Content-Type": mime, "Content-Length": str(size)})
+        with urllib.request.urlopen(put, timeout=900) as res2:
+            body = json.loads(res2.read().decode())
+    if "id" not in body:
+        raise HTTPException(502, "Drive no confirmó la subida del audio.")
     return body["id"]
 
 

@@ -549,6 +549,8 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
   border:1px solid var(--line); border-radius:8px; padding:4px 10px; font-weight:800; white-space:nowrap}
 .sr-row .sr-dl:hover{color:var(--gold); border-color:rgba(255,178,76,.5)}
 .status-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; padding-top:16px; border-top:1px solid var(--line-soft)}
+.notify-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:16px; padding:11px 12px; border-radius:12px; background:var(--gold-soft); border:1px solid rgba(255,178,76,.28)}
+.notify-row .notify-lbl{font-size:12.5px; font-weight:700; color:var(--gold)}
 .spacer{flex:1}
 
 .toast{
@@ -771,6 +773,9 @@ body.calview .pagehead{margin-bottom:18px}
   padding:2px 7px; border-radius:99px; line-height:1.5;
   color:hsl(var(--chc) 75% 80%); background:hsl(var(--chc) 60% 50% / .15); border:1px solid hsl(var(--chc) 60% 55% / .38);
 }
+.calev-task{font-style:normal; font-size:11px}
+.calev.istask{border-color:rgba(255,178,76,.3)}
+.calev.istask.clickable:hover{border-color:rgba(255,178,76,.6)}
 .calev-clip{font-style:normal; font-family:'Space Mono',monospace; font-size:10px; color:var(--dim); white-space:nowrap}
 .calev-acts a{text-decoration:none; font-size:12px; line-height:1; opacity:.7}
 .calev-acts a:hover{opacity:1}
@@ -1711,6 +1716,13 @@ async function openTask(id){
     <label>Nota de entrega</label>
     <textarea id="d-note" rows="2" placeholder="Ej: quedó en Servidor 1 / carpeta IM / video 43">${esc(t.delivery_note)}</textarea>
 
+    ${t.status==='revision'?`
+    <div class="notify-row">
+      <span class="notify-lbl">🔔 Avisar al equipo:</span>
+      <button class="btn ghost sm" onclick="taskNotify(${t.id},'revisado',this)">🎧 Audio revisado</button>
+      <button class="btn ghost sm" onclick="taskNotify(${t.id},'ecualizado',this)">🎚️ Audio ecualizado</button>
+    </div>`:''}
+
     <div class="status-actions">
       ${nextBtns.map(([s,l,cls])=>`<button class="btn sm ${cls}" onclick="${s==='terminado'?`openArchive(${t.id})`:`moveTask(${t.id},'${s}')`}">${l}</button>`).join('')}
       <span class="spacer"></span>
@@ -1775,6 +1787,16 @@ async function openTask(id){
     try{ await api('/tasks/'+t.id,{method:'DELETE'}); ov.remove(); await refresh(); renderApp(); toast('Tarea eliminada'); }
     catch(e){ toast(e.message); }
   };
+}
+
+async function taskNotify(id, kind, btn){
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Enviando…';
+  try{
+    const r = await api('/tasks/'+id+'/notify',{method:'POST',body:JSON.stringify({kind})});
+    toast('🔔 Aviso enviado: '+r.label);
+    btn.textContent = '✓ Enviado';
+    setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
+  }catch(e){ toast(e.message); btn.textContent = old; btn.disabled = false; }
 }
 
 async function moveTask(id, status){
@@ -1973,20 +1995,20 @@ async function renderCalendario(){
           <div class="calcol-date">${d.getDate()} ${MES[d.getMonth()]}</div>
         </div>
         <div class="calevs">
-          ${evs.map(e=>`
-            <div class="calev ${e.done?'done':''} clickable"
-              onclick="toggleCalDone(${e.id})"
-              title="${e.done?'Clic para marcar pendiente':'Clic para marcar listo'}">
+          ${evs.map(e=>{ const isTask=!!e.task_id; return `
+            <div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}"
+              onclick="${isTask?`jumpToTask(${e.task_id}, '${esc(e.channel||'').replace(/'/g,"\\'")}')`:`toggleCalDone(${e.id})`}"
+              title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
               ${e.channel?`<span class="calev-ch" style="--chc:${chHue(e.channel)}" title="Canal: ${esc(e.channel)}">${esc(e.channel)}</span>`:''}
               <div class="calev-row">
-                <span class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</span>
+                <span class="calev-t">${isTask?'<em class="calev-task">📋</em> ':''}${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</span>
                 <span class="calev-acts">
                   ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
-                  <button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>
+                  ${isTask?'':`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>`}
                   <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
                 </span>
               </div>
-            </div>`).join('')}
+            </div>`; }).join('')}
           <button class="caladd" onclick="openCalNew('${esc(key)}')" title="Anotar en ${DIAS[i]}">+</button>
         </div>
       </div>`;
