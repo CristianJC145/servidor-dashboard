@@ -186,6 +186,7 @@ def init_db():
         ("users", "email", "ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''"),
         ("users", "panel_access", "ALTER TABLE users ADD COLUMN panel_access INTEGER DEFAULT 0"),
         ("calendar_events", "done", "ALTER TABLE calendar_events ADD COLUMN done INTEGER DEFAULT 0"),
+        ("calendar_events", "channel", "ALTER TABLE calendar_events ADD COLUMN channel TEXT DEFAULT ''"),
     ]:
         cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         if col not in cols:
@@ -1865,6 +1866,7 @@ class CalEvent(BaseModel):
     date: str
     title: str
     url: str = ""
+    channel: str = ""
 
 
 @app.get("/api/calendar")
@@ -1893,7 +1895,7 @@ def calendar_list(start: str = "", end: str = "", user: dict = Depends(get_curre
 
 
 @app.post("/api/calendar")
-def calendar_create(body: CalEvent, admin: dict = Depends(require_admin)):
+def calendar_create(body: CalEvent, user: dict = Depends(get_current_user)):
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", body.date.strip()):
         raise HTTPException(400, "Fecha no válida.")
     if not body.title.strip():
@@ -1903,8 +1905,8 @@ def calendar_create(body: CalEvent, admin: dict = Depends(require_admin)):
         url = "https://" + url
     conn = db()
     cur = conn.execute(
-        "INSERT INTO calendar_events (date, title, url, created_by, created_at) VALUES (?,?,?,?,?)",
-        (body.date.strip(), body.title.strip(), url, admin["id"], now()))
+        "INSERT INTO calendar_events (date, title, url, channel, created_by, created_at) VALUES (?,?,?,?,?,?)",
+        (body.date.strip(), body.title.strip(), url, body.channel.strip(), user["id"], now()))
     conn.commit()
     row = conn.execute("SELECT * FROM calendar_events WHERE id = ?", (cur.lastrowid,)).fetchone()
     conn.close()
@@ -1912,14 +1914,14 @@ def calendar_create(body: CalEvent, admin: dict = Depends(require_admin)):
 
 
 @app.patch("/api/calendar/{event_id}")
-def calendar_update(event_id: int, body: CalEvent, admin: dict = Depends(require_admin)):
+def calendar_update(event_id: int, body: CalEvent, user: dict = Depends(get_current_user)):
     url = body.url.strip()
     if url and not (url.startswith("http://") or url.startswith("https://")):
         url = "https://" + url
     conn = db()
     cur = conn.execute(
-        "UPDATE calendar_events SET date = ?, title = ?, url = ? WHERE id = ?",
-        (body.date.strip(), body.title.strip(), url, event_id))
+        "UPDATE calendar_events SET date = ?, title = ?, url = ?, channel = ? WHERE id = ?",
+        (body.date.strip(), body.title.strip(), url, body.channel.strip(), event_id))
     conn.commit()
     conn.close()
     if cur.rowcount == 0:
@@ -1928,7 +1930,7 @@ def calendar_update(event_id: int, body: CalEvent, admin: dict = Depends(require
 
 
 @app.post("/api/calendar/{event_id}/toggle")
-def calendar_toggle(event_id: int, admin: dict = Depends(require_admin)):
+def calendar_toggle(event_id: int, user: dict = Depends(get_current_user)):
     """Marca/desmarca la anotación como lista (verde)."""
     conn = db()
     row = conn.execute("SELECT done FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
@@ -1943,7 +1945,7 @@ def calendar_toggle(event_id: int, admin: dict = Depends(require_admin)):
 
 
 @app.post("/api/calendar/{event_id}/upload")
-async def calendar_upload(event_id: int, file: UploadFile = File(...), admin: dict = Depends(require_admin)):
+async def calendar_upload(event_id: int, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """Adjunta un archivo a una anotación. Se guarda en el servidor, organizado por fecha."""
     conn = db()
     ev = conn.execute("SELECT * FROM calendar_events WHERE id = ?", (event_id,)).fetchone()
@@ -1982,7 +1984,7 @@ async def calendar_upload(event_id: int, file: UploadFile = File(...), admin: di
 
 
 @app.delete("/api/calendar/files/{file_id}")
-def calendar_file_delete(file_id: int, admin: dict = Depends(require_admin)):
+def calendar_file_delete(file_id: int, user: dict = Depends(get_current_user)):
     conn = db()
     f = conn.execute("SELECT * FROM calendar_files WHERE id = ?", (file_id,)).fetchone()
     if f:
@@ -1996,7 +1998,7 @@ def calendar_file_delete(file_id: int, admin: dict = Depends(require_admin)):
 
 
 @app.delete("/api/calendar/{event_id}")
-def calendar_delete(event_id: int, admin: dict = Depends(require_admin)):
+def calendar_delete(event_id: int, user: dict = Depends(get_current_user)):
     conn = db()
     # borrar también los archivos físicos adjuntos
     for f in conn.execute("SELECT url FROM calendar_files WHERE event_id = ?", (event_id,)).fetchall():

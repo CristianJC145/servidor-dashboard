@@ -752,13 +752,21 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 .calevs{display:flex; flex-direction:column; gap:7px; padding:12px; flex:1}
 .calempty{color:var(--line); font-size:12px; text-align:center; margin:auto 0; padding:20px 4px; font-family:'Space Mono',monospace; letter-spacing:.05em}
 .calev{
-  display:flex; align-items:flex-start; gap:6px; justify-content:space-between;
+  display:flex; flex-direction:column; align-items:stretch; gap:5px;
   background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:9px 10px;
   font-size:12.5px; line-height:1.35; transition:border-color .15s, transform .15s, box-shadow .15s;
 }
+.calev-row{display:flex; align-items:flex-start; justify-content:space-between; gap:6px}
 .calev.clickable{cursor:pointer}
 .calev.clickable:hover{border-color:rgba(255,178,76,.4); transform:translateY(-1px); box-shadow:0 6px 16px -8px rgba(0,0,0,.6)}
 .calev-t{font-weight:700; word-break:break-word; flex:1}
+/* etiqueta de canal: pastilla pequeña con color propio por canal (discreta pero visible) */
+.calev-ch{
+  flex:none; align-self:flex-start; max-width:84px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:'Space Mono',monospace; font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  padding:2px 7px; border-radius:99px; line-height:1.5;
+  color:hsl(var(--chc) 75% 80%); background:hsl(var(--chc) 60% 50% / .15); border:1px solid hsl(var(--chc) 60% 55% / .38);
+}
 .calev-clip{font-style:normal; font-family:'Space Mono',monospace; font-size:10px; color:var(--dim); white-space:nowrap}
 .calev-acts a{text-decoration:none; font-size:12px; line-height:1; opacity:.7}
 .calev-acts a:hover{opacity:1}
@@ -1921,6 +1929,9 @@ function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0
 function calShift(days){ CAL_MONDAY.setDate(CAL_MONDAY.getDate()+days); renderCalendario(); }
 function calToday(){ CAL_MONDAY = mondayOf(new Date()); renderCalendario(); }
 
+// color estable por canal (mismo canal → mismo tono siempre)
+function chHue(s){ let h=0; for(let i=0;i<String(s).length;i++) h=(h*31+String(s).charCodeAt(i))>>>0; return h%360; }
+
 async function renderCalendario(){
   const isAdmin = ME.role==='admin';
   if(!CAL_MONDAY) CAL_MONDAY = mondayOf(new Date());
@@ -1958,17 +1969,20 @@ async function renderCalendario(){
         </div>
         <div class="calevs">
           ${evs.map(e=>`
-            <div class="calev ${e.done?'done':''} ${isAdmin?'clickable':''}"
-              ${isAdmin?`onclick="toggleCalDone(${e.id})"`:(e.url?`onclick="window.open('${esc(e.url).replace(/'/g,"\\'")}','_blank')" style="cursor:pointer"`:'')}
-              title="${isAdmin?(e.done?'Clic para marcar pendiente':'Clic para marcar listo'):(e.url?esc(e.url):'')}">
-              <span class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</span>
-              <span class="calev-acts">
-                ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
-                ${isAdmin?`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>
-                <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>`:''}
-              </span>
-            </div>`).join('') || (isAdmin?'':'<div class="calempty">Sin anotaciones</div>')}
-          ${isAdmin?`<button class="caladd" onclick="openCalNew('${esc(key)}')" title="Anotar en ${DIAS[i]}">+</button>`:''}
+            <div class="calev ${e.done?'done':''} clickable"
+              onclick="toggleCalDone(${e.id})"
+              title="${e.done?'Clic para marcar pendiente':'Clic para marcar listo'}">
+              ${e.channel?`<span class="calev-ch" style="--chc:${chHue(e.channel)}" title="Canal: ${esc(e.channel)}">${esc(e.channel)}</span>`:''}
+              <div class="calev-row">
+                <span class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</span>
+                <span class="calev-acts">
+                  ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
+                  <button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>
+                  <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
+                </span>
+              </div>
+            </div>`).join('')}
+          <button class="caladd" onclick="openCalNew('${esc(key)}')" title="Anotar en ${DIAS[i]}">+</button>
         </div>
       </div>`;
     }).join('')}
@@ -2007,6 +2021,11 @@ function openCalModal(ev){
     <div class="sub">EN EL CALENDARIO</div>
     <label>Fecha</label><input id="ce-date" type="date" value="${esc(ev.date||'')}">
     <label>Anotación *</label><input id="ce-title" placeholder="Ej: Guion Drew" value="${esc(ev.title||'')}">
+    <label>¿De qué canal es?</label>
+    <select id="ce-channel">
+      <option value="">— Sin canal —</option>
+      ${CHANNELS.map(c=>`<option value="${esc(c.name)}" ${ev.channel===c.name?'selected':''}>${esc(c.name)}</option>`).join('')}
+    </select>
     <label>Link (opcional)</label><input id="ce-url" placeholder="🔗 pega un link (Docs, Drive…)" value="${esc(ev.url||'')}">
     <label>Archivos</label>
     <div class="filelist" id="ce-files">${filesHTML()}</div>
@@ -2047,14 +2066,15 @@ function openCalModal(ev){
 
   $('#ce-save').onclick = async ()=>{
     const date=$('#ce-date').value, title=$('#ce-title').value.trim(), url=$('#ce-url').value.trim();
+    const channel=$('#ce-channel').value;
     if(!date){ $('#ce-err').textContent='Elige la fecha.'; return; }
     if(!title){ $('#ce-err').textContent='Escribe la anotación.'; return; }
     const btn=$('#ce-save'); btn.disabled=true;
     try{
-      if(editing){ await api(`/calendar/${ev.id}`,{method:'PATCH',body:JSON.stringify({date,title,url})}); }
+      if(editing){ await api(`/calendar/${ev.id}`,{method:'PATCH',body:JSON.stringify({date,title,url,channel})}); }
       else{
         btn.textContent='Creando…';
-        const nuevo = await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url})});
+        const nuevo = await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url,channel})});
         for(let i=0;i<queue.length;i++){
           btn.textContent=`Subiendo ${i+1}/${queue.length}…`;
           const fd=new FormData(); fd.append('file', queue[i]);
