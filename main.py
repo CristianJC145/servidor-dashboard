@@ -827,9 +827,37 @@ async def upload_task_file(task_id: int, file: UploadFile = File(...), user: dic
         os.remove(dest)
         conn.close()
         raise
+    kind = guess_kind(original)
+    # 🎵 AUDIO → Google Drive (carpeta "AUDIOS TEMPORALES"): descarga directa y rápida, no se queda
+    # en el servidor. Si Drive falla o no está conectado, cae al servidor (no perder el archivo).
+    if kind == "música":
+        try:
+            acc = active_account(conn)
+            if acc:
+                token = drive_access_token(conn, acc)
+                root = drive_root_folder(conn, token, acc)
+                folder = drive_ensure_folder(conn, token, AUDIOS_FOLDER_NAME, root)
+                fid = drive_upload_media(token, original, dest, folder,
+                                         file.content_type or "audio/mpeg")
+                try:
+                    os.remove(dest)  # ya está en Drive, no se almacena en el servidor
+                except OSError:
+                    pass
+                dl = f"https://drive.google.com/uc?export=download&id={fid}"
+                conn.execute(
+                    "INSERT INTO task_files (task_id, label, url, kind, storage, drive_file_id, size, added_by, created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (task_id, original, dl, "música", "drive", fid, size, user["id"], now()))
+                conn.commit()
+                t = task_full(conn, task_id)
+                conn.close()
+                return t
+        except Exception:
+            pass  # cualquier fallo de Drive → guardar en el servidor (abajo)
+    # (por defecto, o si Drive no está / falló) → servidor
     conn.execute(
         "INSERT INTO task_files (task_id, label, url, kind, added_by, created_at) VALUES (?,?,?,?,?,?)",
-        (task_id, original, "/uploads/" + stored, guess_kind(original), user["id"], now()),
+        (task_id, original, "/uploads/" + stored, kind, user["id"], now()),
     )
     conn.commit()
     t = task_full(conn, task_id)
@@ -1337,7 +1365,7 @@ def drive_upload_small(conn, name: str, content: str, folder_id: str) -> str:
     return body["id"]
 
 
-AUDIOS_FOLDER_NAME = "AUDIOS PARA REVISAR"
+AUDIOS_FOLDER_NAME = "AUDIOS TEMPORALES"
 
 
 def drive_upload_media(token: str, name: str, filepath: str, folder_id: str,

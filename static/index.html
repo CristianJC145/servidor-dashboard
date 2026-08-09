@@ -1669,8 +1669,9 @@ async function openTask(id){
   document.querySelectorAll('.overlay').forEach(o=>o.remove());
   const isAdmin = ME.role==='admin';
   const canEdit = isAdmin || t.assigned_to===ME.id;
-  const adjuntos = t.files.filter(f=>f.storage!=='drive');
-  const videos   = t.files.filter(f=>f.storage==='drive');
+  // los audios viven en Drive (carpeta AUDIOS TEMPORALES) pero se listan como adjuntos de trabajo
+  const adjuntos = t.files.filter(f=>f.storage!=='drive' || f.kind==='música');
+  const videos   = t.files.filter(f=>f.storage==='drive' && f.kind!=='música');
 
   // puede terminar: el admin, o el editor si la tarea es suya (o está sin asignar)
   const canFinish = isAdmin || !t.assigned_to || t.assigned_to===ME.id;
