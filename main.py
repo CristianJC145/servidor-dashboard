@@ -872,8 +872,10 @@ TASK_NOTIFY_LABELS = {
 
 @app.post("/api/tasks/{task_id}/notify")
 def task_notify(task_id: int, body: TaskNotify, user: dict = Depends(get_current_user)):
-    """Aviso rápido ligado a una tarea (p. ej. 'Audio revisado terminado' / 'Audio ecualizado
-    terminado'). Va a los administradores y al asignado, menos a quien lo envía."""
+    """Aviso rápido ligado a una tarea. Destinatario según el tipo:
+    - 'revisado' (lo revisó el editor): le llega al/los ADMIN.
+    - 'ecualizado' (lo ecualizó el admin): le llega a la OTRA persona (el editor asignado; si no
+      hay, a todos los editores). Nunca al que lo envía."""
     label = TASK_NOTIFY_LABELS.get(body.kind)
     if not label:
         raise HTTPException(400, "Tipo de aviso no válido.")
@@ -882,16 +884,28 @@ def task_notify(task_id: int, body: TaskNotify, user: dict = Depends(get_current
     if not t:
         conn.close()
         raise HTTPException(404, "Tarea no encontrada.")
-    targets = [r["id"] for r in conn.execute(
-        "SELECT id FROM users WHERE role='admin' AND active=1").fetchall()]
-    if t["assigned_to"]:
-        targets.append(t["assigned_to"])
+    if body.kind == "revisado":
+        targets = admin_ids(conn)                       # → al admin
+    else:  # ecualizado → a la otra persona (el editor)
+        if t["assigned_to"]:
+            targets = [t["assigned_to"]]
+        else:
+            targets = [r["id"] for r in conn.execute(
+                "SELECT id FROM users WHERE role='editor' AND active=1").fetchall()]
+    # ¿hay a quién avisar (aparte de quien lo manda) y por dónde?
+    reach = [i for i in targets if i and i != user["id"]]
+    has_channel = bool(cfg_get(conn, "telegram_bot_token")) or bool(smtp_cfg(conn))
     notify_users(conn, targets,
                  f"{label}\n<b>Tarea:</b> {t['title']}\n"
                  f"Canal: {t['channel'] or '—'}\nPor: {user['display_name']}",
                  exclude=user["id"], subject=f"{label} — {t['title']}")
     conn.close()
-    return {"ok": True, "label": label}
+    note = ""
+    if not reach:
+        note = "No hay a quién avisar (no hay destinatario para este aviso)."
+    elif not has_channel:
+        note = "Aviso registrado, pero falta conectar Telegram o correo en 🔔 Notificaciones para que llegue."
+    return {"ok": True, "label": label, "delivered": bool(reach and has_channel), "note": note}
 
 
 # ---------------------------------------------------------------- extras

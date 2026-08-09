@@ -1803,7 +1803,7 @@ async function taskNotify(id, kind, btn){
   const old = btn.textContent; btn.disabled = true; btn.textContent = 'Enviando…';
   try{
     const r = await api('/tasks/'+id+'/notify',{method:'POST',body:JSON.stringify({kind})});
-    toast('🔔 Aviso enviado: '+r.label);
+    if(r.note){ toast('⚠️ '+r.note); } else { toast('🔔 Aviso enviado: '+r.label); }
     btn.textContent = '✓ Enviado';
     setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 2500);
   }catch(e){ toast(e.message); btn.textContent = old; btn.disabled = false; }
