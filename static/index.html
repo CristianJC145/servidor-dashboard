@@ -724,8 +724,12 @@ mark{background:rgba(233,180,76,.28); color:var(--gold); border-radius:3px; padd
 .calboard{
   display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px;
   background:var(--line-soft); border:1px solid var(--line);
-  border-radius:16px; overflow:hidden; min-height:min(640px, calc(100vh - 210px));
+  border-radius:16px; overflow:hidden; min-height:calc(100vh - 168px);
 }
+.calevs{overflow-y:auto}
+/* vista Calendario a lo ancho: usa todo el espacio de los lados */
+body.calview .main{max-width:none; padding-top:26px}
+body.calview .pagehead{margin-bottom:18px}
 .calcol{
   background:var(--bg); display:flex; flex-direction:column;
   transition:background .2s;
@@ -1165,6 +1169,7 @@ function paintView(){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('on'));
   // el Panel de canales ocupa toda la pantalla (oculta el menú del servidor)
   document.body.classList.toggle('panelfull', VIEW.name==='panel');
+  document.body.classList.toggle('calview', VIEW.name==='calendario'); // calendario a lo ancho
   if(PANEL_HOST && VIEW.name!=='panel') PANEL_HOST.style.display = 'none';
   if(VIEW.name==='equipo'){ $('#nav-equipo')?.classList.add('on'); renderEquipo(); }
   else if(VIEW.name==='ajustes'){ $('#nav-ajustes')?.classList.add('on'); renderAjustes(); }
