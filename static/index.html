@@ -1709,7 +1709,6 @@ async function openTask(id){
         ${(isAdmin||f.added_by===ME.id)?`<button title="Quitar" onclick="delFile(${f.id},${t.id})">✕</button>`:''}
       </div>`).join('') || '<div style="font-size:13px;color:var(--dim)">Aún no hay adjuntos.</div>'}
     </div>
-    ${isAdmin?`
     <div class="dropzone" id="d-dz" style="padding:14px 12px">
       <span style="font-size:16px">⇪</span> Suelta guion, miniatura o música aquí (queda en el servidor)
     </div>
@@ -1718,7 +1717,7 @@ async function openTask(id){
       <input id="d-linkname" placeholder="Nombre (ej: Guion en Docs)" autocomplete="off" style="flex:0 0 34%">
       <input id="d-link" placeholder="🔗 pega el link aquí" autocomplete="off">
       <button class="btn ghost sm" id="d-linkbtn" type="button">Añadir link</button>
-    </div>`:''}
+    </div>
 
     <label style="margin-top:16px">Material del proyecto · <span style="color:var(--gold)">Google Drive</span></label>
     ${videoFinalHTML(t, videos)}

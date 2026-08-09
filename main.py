@@ -773,9 +773,7 @@ def add_file(task_id: int, body: FileCreate, user: dict = Depends(get_current_us
     if not t:
         conn.close()
         raise HTTPException(404, "Tarea no encontrada.")
-    if user["role"] != "admin" and t["assigned_to"] != user["id"]:
-        conn.close()
-        raise HTTPException(403, "Solo puedes adjuntar archivos a tus propias tareas.")
+    # todo el equipo puede adjuntar links/archivos a cualquier tarea (igual que subir archivo)
     url = body.url.strip()
     if not (url.startswith("http://") or url.startswith("https://")):
         conn.close()
