@@ -382,6 +382,12 @@ input,select,textarea,.sttab,.arch-box,.filelist,.dropzone{
 }
 .qbtn:hover{border-color:var(--blue); color:var(--blue)}
 .qbtn.gold:hover{border-color:var(--gold); color:var(--gold)}
+.qnotify{display:flex; gap:6px; margin-top:8px}
+.qnbtn{flex:1; border:1px solid rgba(255,178,76,.28); background:var(--gold-soft); color:var(--gold);
+  border-radius:9px; padding:6px 6px; font-size:11px; font-weight:800; white-space:nowrap;
+  transition:border-color .15s, filter .15s, transform .15s}
+.qnbtn:hover{border-color:var(--gold); filter:brightness(1.15)}
+.qnbtn:active{transform:scale(.96)}
 
 /* ===== indicador de estado — puntito que alumbra + etiqueta ===== */
 .beacon{display:inline-flex; align-items:center; gap:8px}
@@ -1360,6 +1366,10 @@ function taskCard(t){
     </div>
     <div class="botrow">${beaconHTML(t.status)}</div>
     ${t.status==='pendiente'?`<button class="qbtn" onclick="event.stopPropagation();moveTask(${t.id},'revision')">▶ Ya está en revisión</button>`:''}
+    ${t.status==='revision'?`<div class="qnotify">
+      <button class="qnbtn" onclick="event.stopPropagation();taskNotify(${t.id},'revisado',this)" title="Avisar al equipo: audio revisado">🎧 Revisado</button>
+      <button class="qnbtn" onclick="event.stopPropagation();taskNotify(${t.id},'ecualizado',this)" title="Avisar al equipo: audio ecualizado">🎚️ Ecualizado</button>
+    </div>`:''}
     ${t.status==='revision'&&isAdmin?`<button class="qbtn gold" onclick="event.stopPropagation();openArchive(${t.id})">✦ Marcar terminado</button>`:''}
   </div>`;
 }
@@ -1997,7 +2007,7 @@ async function renderCalendario(){
         <div class="calevs">
           ${evs.map(e=>{ const isTask=!!e.task_id; return `
             <div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}"
-              onclick="${isTask?`jumpToTask(${e.task_id}, '${esc(e.channel||'').replace(/'/g,"\\'")}')`:`toggleCalDone(${e.id})`}"
+              onclick="${isTask?`openTask(${e.task_id})`:`toggleCalDone(${e.id})`}"
               title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
               ${e.channel?`<span class="calev-ch" style="--chc:${chHue(e.channel)}" title="Canal: ${esc(e.channel)}">${esc(e.channel)}</span>`:''}
               <div class="calev-row">
