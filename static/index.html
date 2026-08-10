@@ -2026,14 +2026,14 @@ function calShiftMonth(n){
 function calEventHTML(e, key){
   const isTask=!!e.task_id, hue=e.channel?chHue(e.channel):18;
   return `<div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}" style="--chc:${hue}"
-    onclick="${isTask?`openTask(${e.task_id})`:`toggleCalDone(${e.id})`}"
-    title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
+    onclick="calCardClick(${e.id})"
+    ondblclick="calCardDbl(${e.id},${isTask?e.task_id:'null'},'${esc(key)}')"
+    title="Un clic: marcar · Doble clic: abrir">
     <div class="calev-head">
       <span class="calev-ch">${e.channel?esc(e.channel):'nota'}</span>
       <span class="calev-acts">
         ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
-        ${isTask?'':`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>`}
-        <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
+        ${isTask?'':`<button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>`}
       </span>
     </div>
     <div class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</div>
@@ -2236,6 +2236,18 @@ async function delCalEvent(id){
 async function toggleCalDone(id){
   try{ const r = await api(`/calendar/${id}/toggle`,{method:'POST'}); renderCalendario(); toast(r.done?'Listo ✓':'Marcado pendiente'); }
   catch(e){ toast(e.message); }
+}
+
+// gestos estilo Calendario de Mac: un clic marca (se pinta), doble clic abre a editar
+let _calGestureT = null;
+function calCardClick(id){
+  clearTimeout(_calGestureT);
+  _calGestureT = setTimeout(()=>{ toggleCalDone(id); }, 220);
+}
+function calCardDbl(id, taskId, key){
+  clearTimeout(_calGestureT);            // cancela el "un clic" pendiente
+  if(taskId) openTask(taskId);
+  else openCalEdit(id, key);
 }
 
 /* =============================== notificaciones (Telegram + Correo) =============================== */
