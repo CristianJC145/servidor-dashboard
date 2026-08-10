@@ -763,36 +763,40 @@ body.calview .pagehead{margin-bottom:18px}
 .calcol.today .calcol-h{border-bottom-color:rgba(255,106,31,.3)}
 .calevs{display:flex; flex-direction:column; gap:7px; padding:12px; flex:1}
 .calempty{color:var(--line); font-size:12px; text-align:center; margin:auto 0; padding:20px 4px; font-family:'Space Mono',monospace; letter-spacing:.05em}
+/* ===== tarjeta de evento: color por CANAL · pendiente = contorno · hecho = color lleno ===== */
 .calev{
-  display:flex; flex-direction:column; align-items:stretch; gap:5px;
-  background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:9px 10px;
-  font-size:12.5px; line-height:1.35; transition:border-color .15s, transform .15s, box-shadow .15s;
+  display:flex; flex-direction:column; gap:5px; border-radius:12px; padding:9px 11px 10px;
+  border:1.5px solid hsl(var(--chc) 70% 60% / .55);
+  background:linear-gradient(180deg, hsl(var(--chc) 60% 50% / .14), hsl(var(--chc) 55% 45% / .05));
+  transition:transform .16s var(--ease), box-shadow .18s var(--ease), background .25s, border-color .25s;
+  animation:calpop .28s var(--ease) both;
 }
-.calev-row{display:flex; align-items:flex-start; justify-content:space-between; gap:6px}
+@keyframes calpop{from{opacity:0; transform:translateY(5px) scale(.98)} to{opacity:1; transform:none}}
 .calev.clickable{cursor:pointer}
-.calev.clickable:hover{border-color:rgba(255,178,76,.4); transform:translateY(-1px); box-shadow:0 6px 16px -8px rgba(0,0,0,.6)}
-.calev-t{font-weight:700; word-break:break-word; flex:1}
-/* etiqueta de canal: pastilla pequeña con color propio por canal (discreta pero visible) */
-.calev-ch{
-  flex:none; align-self:flex-start; max-width:84px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-family:'Space Mono',monospace; font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
-  padding:2px 7px; border-radius:99px; line-height:1.5;
-  color:hsl(var(--chc) 75% 80%); background:hsl(var(--chc) 60% 50% / .15); border:1px solid hsl(var(--chc) 60% 55% / .38);
-}
-.calev-task{font-style:normal; font-size:11px}
-.calev.istask{border-color:rgba(255,178,76,.3)}
-.calev.istask.clickable:hover{border-color:rgba(255,178,76,.6)}
+.calev.clickable:hover{transform:translateY(-2px);
+  box-shadow:0 9px 22px -10px hsl(var(--chc) 60% 42% / .85), 0 2px 6px rgba(0,0,0,.3)}
+.calev-head{display:flex; align-items:center; gap:7px}
+.calev-ic{flex:none; width:15px; text-align:center; font-size:9px; line-height:1; color:hsl(var(--chc) 82% 72%)}
+.calev-ch{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:'Space Mono',monospace; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+  color:hsl(var(--chc) 52% 66%)}
+.calev-t{font-weight:700; font-size:12.5px; line-height:1.3; word-break:break-word; color:var(--ink)}
 .calev-clip{font-style:normal; font-family:'Space Mono',monospace; font-size:10px; color:var(--dim); white-space:nowrap}
-.calev-acts a{text-decoration:none; font-size:12px; line-height:1; opacity:.7}
+.calev-acts{display:flex; align-items:center; gap:6px; flex:none}
+.calev-acts a{text-decoration:none; font-size:12px; line-height:1; opacity:.6}
 .calev-acts a:hover{opacity:1}
-/* anotación LISTA → verde */
-.calev.done{background:rgba(62,207,142,.12); border-color:rgba(62,207,142,.5)}
-.calev.done .calev-t{color:#7ee0b4; text-decoration:line-through; text-decoration-color:rgba(126,224,180,.5)}
-.calev.done.clickable:hover{border-color:rgba(62,207,142,.75)}
-.calev-acts{display:flex; align-items:center; gap:5px; flex:none}
-.calev-acts button{background:none; border:none; color:var(--dim); font-size:12px; padding:0 1px; line-height:1; opacity:0; transition:opacity .15s, color .15s}
-.calev:hover .calev-acts button{opacity:1}
-.calev-acts button:hover{color:var(--violet)}
+.calev-acts button{background:none; border:none; color:currentColor; font-size:12px; padding:0; line-height:1;
+  opacity:0; cursor:pointer; transition:opacity .15s}
+.calev:hover .calev-acts button{opacity:.55}
+.calev-acts button:hover{opacity:1}
+/* HECHO → el contorno se "completa": relleno sólido con el color del canal */
+.calev.done{background:hsl(var(--chc) 60% 46%); border-color:transparent;
+  box-shadow:0 5px 16px -7px hsl(var(--chc) 60% 40% / .9), inset 0 1px 0 hsl(var(--chc) 85% 80% / .35)}
+.calev.done .calev-ic{color:#fff}
+.calev.done .calev-ch{color:hsl(var(--chc) 92% 92% / .8)}
+.calev.done .calev-t{color:#fff}
+.calev.done .calev-clip{color:hsl(var(--chc) 95% 94% / .75)}
+.calev.done.clickable:hover{box-shadow:0 9px 24px -8px hsl(var(--chc) 60% 40% / .95)}
 .caladd{
   margin-top:auto; background:none; border:1px dashed var(--line); border-radius:9px; color:var(--dim);
   font-size:17px; font-weight:400; line-height:1; padding:9px; width:100%; transition:all .15s;
@@ -913,7 +917,7 @@ body.calview .pagehead{margin-bottom:18px}
   .calcol-date{margin-top:0}
   .calevs{padding:10px 14px 14px}
   .calempty{margin:0; padding:6px 4px; text-align:left}
-  .calev-acts{opacity:1}
+  .calev-acts button{opacity:.6}
   .caladd{font-size:15px; padding:8px}
 }
 @media (prefers-reduced-motion:no-preference){
@@ -2005,19 +2009,20 @@ async function renderCalendario(){
           <div class="calcol-date">${d.getDate()} ${MES[d.getMonth()]}</div>
         </div>
         <div class="calevs">
-          ${evs.map(e=>{ const isTask=!!e.task_id; return `
-            <div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}"
+          ${evs.map(e=>{ const isTask=!!e.task_id; const hue=e.channel?chHue(e.channel):18; return `
+            <div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}" style="--chc:${hue}"
               onclick="${isTask?`openTask(${e.task_id})`:`toggleCalDone(${e.id})`}"
               title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
-              ${e.channel?`<span class="calev-ch" style="--chc:${chHue(e.channel)}" title="Canal: ${esc(e.channel)}">${esc(e.channel)}</span>`:''}
-              <div class="calev-row">
-                <span class="calev-t">${isTask?'<em class="calev-task">📋</em> ':''}${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</span>
+              <div class="calev-head">
+                <span class="calev-ic">${e.done?'✓':(isTask?'📋':'●')}</span>
+                <span class="calev-ch">${e.channel?esc(e.channel):'nota'}</span>
                 <span class="calev-acts">
                   ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
                   ${isTask?'':`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>`}
                   <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
                 </span>
               </div>
+              <div class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</div>
             </div>`; }).join('')}
           <button class="caladd" onclick="openCalNew('${esc(key)}')" title="Anotar en ${DIAS[i]}">+</button>
         </div>
