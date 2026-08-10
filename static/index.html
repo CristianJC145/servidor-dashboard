@@ -831,11 +831,12 @@ body.calview .pagehead{margin-bottom:18px}
 .calmcell:hover .calmadd{opacity:1}
 .calmadd:hover{border-color:var(--violet); color:var(--violet)}
 /* en la vista Mes las tarjetas van compactas y con texto cómodo, no grandote */
-.calmcell-evs .calev{gap:2px; padding:4px 8px 5px; border-radius:9px}
+.calmcell-evs{gap:6px}
+.calmcell-evs .calev{gap:1px; padding:3px 7px 4px; border-radius:8px}
 .calmcell-evs .calev-head{gap:5px}
-.calmcell-evs .calev-ch{font-size:8px}
-.calmcell-evs .calev-t{font-size:11px; line-height:1.3; font-weight:600; letter-spacing:.01em}
-.calmcell-evs .calev-acts a,.calmcell-evs .calev-acts button{font-size:11px}
+.calmcell-evs .calev-ch{font-size:7.5px}
+.calmcell-evs .calev-t{font-size:10.5px; line-height:1.28; font-weight:600; letter-spacing:.01em}
+.calmcell-evs .calev-acts a,.calmcell-evs .calev-acts button{font-size:10px}
 @media(max-width:900px){ .calmonth-grid{grid-auto-rows:minmax(90px,1fr); min-height:0} .calmonth-h>div{padding:9px 8px; font-size:9px} .calmcell{padding:5px 5px 7px} }
 
 /* ============ responsive ============ */
@@ -2025,14 +2026,13 @@ function calShiftMonth(n){
 function calEventHTML(e, key){
   const isTask=!!e.task_id, hue=e.channel?chHue(e.channel):18;
   return `<div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}" style="--chc:${hue}"
-    onclick="${isTask?`openTask(${e.task_id})`:`toggleCalDone(${e.id})`}"
-    title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
+    onclick="${isTask?`openTask(${e.task_id})`:`openCalEdit(${e.id},'${esc(key)}')`}"
+    title="${isTask?'Abrir la tarea':'Abrir la nota'}">
     <div class="calev-head">
       <span class="calev-ch">${e.channel?esc(e.channel):'nota'}</span>
       <span class="calev-acts">
         ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
-        ${isTask?'':`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>`}
-        <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
+        ${isTask?'':`<button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>`}
       </span>
     </div>
     <div class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</div>
@@ -2175,11 +2175,13 @@ function openCalModal(ev){
     <div class="err" id="ce-err"></div>
     <div class="modal-actions">
       <button class="btn" id="ce-save">${editing?'Guardar':'Anotar'}</button>
+      ${editing?`<button class="btn ghost" id="ce-done">${ev.done?'↺ Marcar pendiente':'✓ Marcar hecho'}</button>`:''}
       <button class="btn ghost" onclick="this.closest('.overlay').remove()">Cancelar</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  if(editing){ $('#ce-done').onclick = async ()=>{ await toggleCalDone(ev.id); ov.remove(); }; }
   $('#ce-title').focus();
   const repaint = ()=>{ $('#ce-files').innerHTML = filesHTML(); };
 
