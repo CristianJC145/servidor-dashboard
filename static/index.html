@@ -776,7 +776,11 @@ body.calview .pagehead{margin-bottom:18px}
 .calev.clickable:hover{transform:translateY(-2px);
   box-shadow:0 9px 22px -10px hsl(var(--chc) 60% 42% / .85), 0 2px 6px rgba(0,0,0,.3)}
 .calev-head{display:flex; align-items:center; gap:7px}
-.calev-ic{flex:none; width:15px; text-align:center; font-size:9px; line-height:1; color:hsl(var(--chc) 82% 72%)}
+.calev-ic{flex:none; width:18px; height:18px; display:flex; align-items:center; justify-content:center;
+  border-radius:50%; font-size:9px; line-height:1; cursor:pointer; color:hsl(var(--chc) 82% 72%);
+  transition:background .15s, transform .12s}
+.calev-ic:hover{background:hsl(var(--chc) 70% 55% / .3); transform:scale(1.12)}
+.calev.done .calev-ic:hover{background:hsl(var(--chc) 90% 90% / .3)}
 .calev-ch{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-family:'Space Mono',monospace; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
   color:hsl(var(--chc) 52% 66%)}
@@ -802,6 +806,31 @@ body.calview .pagehead{margin-bottom:18px}
   font-size:17px; font-weight:400; line-height:1; padding:9px; width:100%; transition:all .15s;
 }
 .caladd:hover{border-color:var(--violet); color:var(--violet); background:rgba(255,106,31,.05)}
+
+/* ===== toggle Semana / Mes ===== */
+.calmode{display:inline-flex; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; margin-right:6px}
+.calmode button{background:none; border:none; color:var(--muted); font-size:12.5px; font-weight:800; padding:6px 15px; border-radius:8px; cursor:pointer; transition:background .15s, color .15s}
+.calmode button.on{background:var(--grad); color:#fff; box-shadow:var(--glow)}
+.calmode button:not(.on):hover{color:var(--ink)}
+
+/* ===== vista MES (días completos) ===== */
+.calmonth{border:1px solid var(--line); border-radius:16px; overflow:hidden}
+.calmonth-h{display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--line-soft)}
+.calmonth-h>div{background:var(--bg); padding:11px 13px; font-family:'Space Mono',monospace; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--dim)}
+.calmonth-grid{display:grid; grid-template-columns:repeat(7,1fr); grid-auto-rows:minmax(116px,1fr); gap:1px; background:var(--line-soft); min-height:calc(100vh - 236px)}
+.calmcell{background:var(--bg); padding:7px 8px 9px; display:flex; flex-direction:column; gap:5px; min-width:0; transition:background .2s}
+.calmcell.otro{background:#0a0a0b}
+.calmcell.otro .calmcell-n{opacity:.4}
+.calmcell.today{background:rgba(255,106,31,.06)}
+.calmcell-h{display:flex; align-items:center; gap:7px}
+.calmcell-n{font-family:'Space Mono',monospace; font-size:13px; font-weight:700; color:var(--muted)}
+.calmcell.today .calmcell-n{color:var(--violet)}
+.calmcell-hoy{font-family:'Space Mono',monospace; font-size:8px; font-weight:700; letter-spacing:.08em; color:#fff; background:var(--grad); padding:1px 6px; border-radius:99px}
+.calmcell-evs{display:flex; flex-direction:column; gap:5px; min-width:0}
+.calmadd{margin-left:auto; width:20px; height:20px; border:1px dashed var(--line); background:none; color:var(--dim); border-radius:6px; font-size:13px; line-height:1; cursor:pointer; opacity:0; transition:opacity .15s, border-color .15s, color .15s}
+.calmcell:hover .calmadd{opacity:1}
+.calmadd:hover{border-color:var(--violet); color:var(--violet)}
+@media(max-width:900px){ .calmonth-grid{grid-auto-rows:minmax(90px,1fr); min-height:0} .calmonth-h>div{padding:9px 8px; font-size:9px} .calmcell{padding:5px 5px 7px} }
 
 /* ============ responsive ============ */
 @media(max-width:960px){
@@ -1973,7 +2002,44 @@ function calToday(){ CAL_MONDAY = mondayOf(new Date()); renderCalendario(); }
 // color estable por canal (mismo canal → mismo tono siempre)
 function chHue(s){ let h=0; for(let i=0;i<String(s).length;i++) h=(h*31+String(s).charCodeAt(i))>>>0; return h%360; }
 
+// modo del calendario: 'semana' | 'mes'
+let CAL_MODE = (()=>{ try{ return localStorage.getItem('cal_mode')||'semana'; }catch{ return 'semana'; } })();
+function calMode(m){ CAL_MODE=m; try{ localStorage.setItem('cal_mode',m); }catch{} renderCalendario(); }
+function calModeToggle(){
+  return `<div class="calmode">
+    <button class="${CAL_MODE==='semana'?'on':''}" onclick="calMode('semana')">Semana</button>
+    <button class="${CAL_MODE==='mes'?'on':''}" onclick="calMode('mes')">Mes</button>
+  </div>`;
+}
+function calShiftMonth(n){
+  const d=new Date(CAL_MONDAY); CAL_MONDAY = mondayOf(new Date(d.getFullYear(), d.getMonth()+n, 15)); renderCalendario();
+}
+
+// HTML de una tarjeta de evento (se usa igual en semana y en mes)
+function calEventHTML(e, key){
+  const isTask=!!e.task_id, hue=e.channel?chHue(e.channel):18;
+  return `<div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}" style="--chc:${hue}"
+    onclick="${isTask?`openTask(${e.task_id})`:`toggleCalDone(${e.id})`}"
+    title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
+    <div class="calev-head">
+      <span class="calev-ic" onclick="event.stopPropagation();toggleCalDone(${e.id})" title="${e.done?'Marcar pendiente':'Marcar hecho'}">${e.done?'✓':(isTask?'📋':'●')}</span>
+      <span class="calev-ch">${e.channel?esc(e.channel):'nota'}</span>
+      <span class="calev-acts">
+        ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
+        ${isTask?'':`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>`}
+        <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
+      </span>
+    </div>
+    <div class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</div>
+  </div>`;
+}
+
 async function renderCalendario(){
+  if(CAL_MODE==='mes') return renderCalMes();
+  return renderCalSemana();
+}
+
+async function renderCalSemana(){
   const isAdmin = ME.role==='admin';
   if(!CAL_MONDAY) CAL_MONDAY = mondayOf(new Date());
   const days = [...Array(7)].map((_,i)=>{ const d=new Date(CAL_MONDAY); d.setDate(d.getDate()+i); return d; });
@@ -1992,6 +2058,7 @@ async function renderCalendario(){
   <div class="pagehead">
     <div><h1>Calendario</h1><div class="sub">${esc(rango)}</div></div>
     <div class="actions cal-nav">
+      ${calModeToggle()}
       <button class="btn ghost sm" onclick="calShift(-7)" title="Semana anterior">‹</button>
       <button class="btn ghost sm" onclick="calToday()">Hoy</button>
       <button class="btn ghost sm" onclick="calShift(7)" title="Semana siguiente">›</button>
@@ -2009,25 +2076,52 @@ async function renderCalendario(){
           <div class="calcol-date">${d.getDate()} ${MES[d.getMonth()]}</div>
         </div>
         <div class="calevs">
-          ${evs.map(e=>{ const isTask=!!e.task_id; const hue=e.channel?chHue(e.channel):18; return `
-            <div class="calev ${e.done?'done':''} clickable ${isTask?'istask':''}" style="--chc:${hue}"
-              onclick="${isTask?`openTask(${e.task_id})`:`toggleCalDone(${e.id})`}"
-              title="${isTask?'Abrir la tarea':(e.done?'Clic para marcar pendiente':'Clic para marcar listo')}">
-              <div class="calev-head">
-                <span class="calev-ic">${e.done?'✓':(isTask?'📋':'●')}</span>
-                <span class="calev-ch">${e.channel?esc(e.channel):'nota'}</span>
-                <span class="calev-acts">
-                  ${e.url?`<a href="${esc(e.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir link">🔗</a>`:''}
-                  ${isTask?'':`<button onclick="event.stopPropagation();openCalEdit(${e.id},'${esc(key)}')" title="Editar">✎</button>`}
-                  <button onclick="event.stopPropagation();delCalEvent(${e.id})" title="Quitar">✕</button>
-                </span>
-              </div>
-              <div class="calev-t">${esc(e.title)}${(e.files&&e.files.length)?` <em class="calev-clip">📎${e.files.length}</em>`:''}</div>
-            </div>`; }).join('')}
+          ${evs.map(e=>calEventHTML(e,key)).join('')}
           <button class="caladd" onclick="openCalNew('${esc(key)}')" title="Anotar en ${DIAS[i]}">+</button>
         </div>
       </div>`;
     }).join('')}
+  </div>`;
+}
+
+async function renderCalMes(){
+  if(!CAL_MONDAY) CAL_MONDAY = mondayOf(new Date());
+  const y=CAL_MONDAY.getFullYear(), m=CAL_MONDAY.getMonth();
+  const gridStart = mondayOf(new Date(y, m, 1));
+  const cells = [...Array(42)].map((_,i)=>{ const d=new Date(gridStart); d.setDate(d.getDate()+i); return d; });
+  const start = ymd(cells[0]), end = ymd(cells[41]);
+  const hoy = ymd(new Date());
+  const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  let events = [];
+  try{ events = await api(`/calendar?start=${start}&end=${end}`); }catch(e){ toast(e.message); }
+  const byDay = {}; events.forEach(e=>{ (byDay[e.date] ||= []).push(e); });
+
+  $('#view').innerHTML = `
+  <div class="pagehead">
+    <div><h1>Calendario</h1><div class="sub">${MESES[m]} ${y}</div></div>
+    <div class="actions cal-nav">
+      ${calModeToggle()}
+      <button class="btn ghost sm" onclick="calShiftMonth(-1)" title="Mes anterior">‹</button>
+      <button class="btn ghost sm" onclick="calToday()">Hoy</button>
+      <button class="btn ghost sm" onclick="calShiftMonth(1)" title="Mes siguiente">›</button>
+    </div>
+  </div>
+  <div class="calmonth">
+    <div class="calmonth-h">${DIAS.map(d=>`<div>${d}</div>`).join('')}</div>
+    <div class="calmonth-grid">
+      ${cells.map(d=>{
+        const key=ymd(d); const evs=byDay[key]||[]; const esHoy=key===hoy; const otro=d.getMonth()!==m;
+        return `<div class="calmcell ${esHoy?'today':''} ${otro?'otro':''}">
+          <div class="calmcell-h">
+            <span class="calmcell-n">${d.getDate()}</span>
+            ${esHoy?'<span class="calmcell-hoy">HOY</span>':''}
+            <button class="calmadd" onclick="openCalNew('${key}')" title="Anotar">+</button>
+          </div>
+          <div class="calmcell-evs">${evs.map(e=>calEventHTML(e,key)).join('')}</div>
+        </div>`;
+      }).join('')}
+    </div>
   </div>`;
 }
 
