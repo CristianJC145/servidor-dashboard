@@ -1028,17 +1028,27 @@ const ICONS = {
   panel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20.5h18"/><rect x="4.5" y="11" width="3.5" height="7" rx="1"/><rect x="10.2" y="6.5" width="3.5" height="11.5" rx="1"/><rect x="15.9" y="9" width="3.5" height="9" rx="1"/></svg>',
 };
 
+/* Error de red (servidor caído / sin internet): el navegador tira "Load failed" o
+   "Failed to fetch", que a Steven no le dice nada. Lo traducimos a algo claro. */
+class SinConexion extends Error {
+  constructor(){ super('Sin conexión con el servidor. Revisa tu internet o el servidor está caído.'); this.offline = true; }
+}
+async function fetchOk(url, opts){
+  try { return await fetch(url, opts); }
+  catch(_) { throw new SinConexion(); }
+}
+
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers||{}) };
   if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
-  const res = await fetch('/api' + path, { ...opts, headers });
+  const res = await fetchOk('/api' + path, { ...opts, headers });
   if (res.status === 401 && TOKEN) { logout(false); throw new Error('Sesión expirada.'); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || 'Error del servidor.');
   return data;
 }
 async function apiUpload(path, formData) {
-  const res = await fetch('/api' + path, {
+  const res = await fetchOk('/api' + path, {
     method:'POST', headers:{ 'Authorization':'Bearer '+TOKEN }, body:formData
   });
   const data = await res.json().catch(() => ({}));
@@ -1652,27 +1662,46 @@ function openNewTask(){
   $('#t-link').onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); tAddLink(); } };
   $('#t-linkname').onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); tAddLink(); } };
 
+  let creada = null;   // si la tarea ya se creó, un reintento NO la vuelve a crear (evita duplicados)
+  let adjuntosIniciales = 0;
   $('#t-save').onclick = async ()=>{
     const title=$('#t-title').value.trim();
     if(!title){ $('#t-err').textContent='El título es obligatorio.'; return; }
-    const btn = $('#t-save'); btn.disabled = true;
+    const btn = $('#t-save'); btn.disabled = true; $('#t-err').textContent='';
     try{
-      btn.textContent = 'Creando…';
-      const t = await api('/tasks',{method:'POST',body:JSON.stringify({
-        title, description:$('#t-desc').value, channel,
-      })});
-      for(let i=0;i<queue.length;i++){
-        btn.textContent = `Subiendo ${i+1}/${queue.length}…`;
-        const fd = new FormData(); fd.append('file', queue[i]);
+      if(!creada){
+        btn.textContent = 'Creando…';
+        adjuntosIniciales = queue.length + links.length;
+        creada = await api('/tasks',{method:'POST',body:JSON.stringify({
+          title, description:$('#t-desc').value, channel,
+        })});
+      }
+      const t = creada;
+      while(queue.length){
+        btn.textContent = `Subiendo ${queue.length} archivo${queue.length===1?'':'s'}…`;
+        const fd = new FormData(); fd.append('file', queue[0]);
         await apiUpload(`/tasks/${t.id}/upload`, fd);
+        queue.shift();          // sale de la cola solo si SÍ subió (un reintento no lo repite)
       }
-      for(const l of links){
+      while(links.length){
+        btn.textContent = 'Guardando links…';
+        const l = links[0];
         await api(`/tasks/${t.id}/files`,{method:'POST',body:JSON.stringify({label:l.label, url:l.url, kind:'link'})});
+        links.shift();
       }
+      const nTot = adjuntosIniciales;
       ov.remove(); await refresh(); paintView();
-      const nTot = queue.length + links.length;
       toast(nTot?`Tarea creada con ${nTot} elemento${nTot===1?'':'s'} ✦`:'Tarea creada ✦');
-    }catch(e){ $('#t-err').textContent=e.message; btn.disabled=false; btn.textContent='Crear tarea'; }
+    }catch(e){
+      $('#t-err').textContent = creada
+        ? `La tarea ya se creó, pero faltó adjuntar: ${e.message}`
+        : e.message;
+    }finally{
+      if(document.body.contains(btn)){
+        btn.disabled = false;
+        btn.textContent = creada ? 'Reintentar adjuntos' : 'Crear tarea';
+      }
+    }
   };
 }
 
@@ -2207,25 +2236,38 @@ function openCalModal(ev){
     } else { queue.push(...picked); repaint(); }
   });
 
+  let creada = null;   // si la anotación ya se creó, un reintento NO la vuelve a crear (evita duplicados)
   $('#ce-save').onclick = async ()=>{
     const date=$('#ce-date').value, title=$('#ce-title').value.trim(), url=$('#ce-url').value.trim();
     const channel=$('#ce-channel').value;
     if(!date){ $('#ce-err').textContent='Elige la fecha.'; return; }
     if(!title){ $('#ce-err').textContent='Escribe la anotación.'; return; }
-    const btn=$('#ce-save'); btn.disabled=true;
+    const btn=$('#ce-save'); btn.disabled=true; $('#ce-err').textContent='';
     try{
       if(editing){ await api(`/calendar/${ev.id}`,{method:'PATCH',body:JSON.stringify({date,title,url,channel})}); }
       else{
-        btn.textContent='Creando…';
-        const nuevo = await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url,channel})});
-        for(let i=0;i<queue.length;i++){
-          btn.textContent=`Subiendo ${i+1}/${queue.length}…`;
-          const fd=new FormData(); fd.append('file', queue[i]);
-          try{ await apiUpload(`/calendar/${nuevo.id}/upload`, fd); }catch(e){ toast(e.message); }
+        if(!creada){
+          btn.textContent='Creando…';
+          creada = await api('/calendar',{method:'POST',body:JSON.stringify({date,title,url,channel})});
+        }
+        while(queue.length){
+          btn.textContent=`Subiendo ${queue.length} archivo${queue.length===1?'':'s'}…`;
+          const fd=new FormData(); fd.append('file', queue[0]);
+          await apiUpload(`/calendar/${creada.id}/upload`, fd);
+          queue.shift();        // sale de la cola solo si SÍ subió (un reintento no lo repite)
         }
       }
       ov.remove(); renderCalendario(); toast('Anotación guardada ✦');
-    }catch(e){ $('#ce-err').textContent=e.message; btn.disabled=false; btn.textContent=editing?'Guardar':'Anotar'; }
+    }catch(e){
+      $('#ce-err').textContent = creada
+        ? `La anotación ya se guardó, pero faltó subir: ${e.message}`
+        : e.message;
+    }finally{
+      if(document.body.contains(btn)){
+        btn.disabled=false;
+        btn.textContent = creada ? 'Reintentar archivos' : (editing?'Guardar':'Anotar');
+      }
+    }
   };
   $('#ce-title').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#ce-save').click(); });
 }
